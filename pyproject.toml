@@ -42,9 +42,9 @@ dev = [
 klipperctl = "klipperctl.cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/cbyrd01/mooncli"
-Repository = "https://github.com/cbyrd01/mooncli"
-Issues = "https://github.com/cbyrd01/mooncli/issues"
+Homepage = "https://github.com/cbyrd01/klipperctl"
+Repository = "https://github.com/cbyrd01/klipperctl"
+Issues = "https://github.com/cbyrd01/klipperctl/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/klipperctl"]
