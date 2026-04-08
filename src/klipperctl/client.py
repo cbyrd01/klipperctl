@@ -55,4 +55,5 @@ def get_client(ctx: click.Context) -> MoonrakerClient:
         client = build_client(ctx)
         ctx.obj["client"] = client
         ctx.call_on_close(client.close)
-    return ctx.obj["client"]
+    result: MoonrakerClient = ctx.obj["client"]
+    return result

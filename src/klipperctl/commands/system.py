@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 import click
+from moonraker_client import MoonrakerClient
 from moonraker_client.exceptions import MoonrakerError
 from moonraker_client.helpers import get_system_health
 
@@ -82,9 +83,9 @@ def health(ctx: click.Context, watch: bool, interval: float) -> None:
         _handle_error(ctx, e)
 
 
-def _show_health(client: object) -> None:
+def _show_health(client: MoonrakerClient) -> None:
     """Fetch and display system health."""
-    data = get_system_health(client)  # type: ignore[arg-type]
+    data = get_system_health(client)
 
     def _human(data: dict) -> None:
         console.print("[bold]System Health[/bold]")

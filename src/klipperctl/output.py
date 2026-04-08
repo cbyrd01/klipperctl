@@ -7,6 +7,7 @@ should go through these helpers to ensure consistent behavior.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -124,7 +125,7 @@ def is_json_mode() -> bool:
     return bool(ctx and ctx.find_root().params.get("json_output"))
 
 
-def output(data: Any, human_fn: Any = None) -> None:
+def output(data: Any, human_fn: Callable[[Any], None] | None = None) -> None:
     """Output data in JSON or human-readable format.
 
     Args:

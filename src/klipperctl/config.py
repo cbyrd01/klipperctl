@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 import tomllib
 
@@ -31,7 +31,8 @@ def load_config() -> dict[str, Any]:
     if not path.exists():
         return {}
     with open(path, "rb") as f:
-        return tomllib.load(f)
+        result: dict[str, Any] = tomllib.load(f)
+        return result
 
 
 def save_config(config: dict[str, Any]) -> None:
@@ -47,7 +48,7 @@ def save_config(config: dict[str, Any]) -> None:
     os.chmod(path, 0o600)
 
 
-def _write_toml(f: Any, data: dict[str, Any], prefix: str = "") -> None:
+def _write_toml(f: IO[str], data: dict[str, Any], prefix: str = "") -> None:
     """Write a dict as TOML. Handles simple values and nested tables."""
     tables = {}
     for key, value in data.items():
@@ -85,7 +86,8 @@ def get_printer_url(config: dict[str, Any]) -> str | None:
         return None
     printers = config.get("printers", {})
     printer = printers.get(default_name, {})
-    return printer.get("url")
+    url: str | None = printer.get("url")
+    return url
 
 
 def get_printer_api_key(config: dict[str, Any]) -> str | None:
@@ -95,4 +97,5 @@ def get_printer_api_key(config: dict[str, Any]) -> str | None:
         return None
     printers = config.get("printers", {})
     printer = printers.get(default_name, {})
-    return printer.get("api_key")
+    key: str | None = printer.get("api_key")
+    return key

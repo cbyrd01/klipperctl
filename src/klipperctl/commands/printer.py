@@ -6,6 +6,7 @@ import sys
 import time
 
 import click
+from moonraker_client import MoonrakerClient
 from moonraker_client.exceptions import MoonrakerError
 from moonraker_client.helpers import (
     PrinterStatus,
@@ -139,15 +140,15 @@ def temps(ctx: click.Context, show_all: bool, watch: bool, interval: float) -> N
         _handle_error(ctx, e)
 
 
-def _show_temps(client: object, show_all: bool) -> None:
+def _show_temps(client: MoonrakerClient, show_all: bool) -> None:
     """Fetch and display temperatures."""
 
-    temps = get_temperatures(client)  # type: ignore[arg-type]
+    temps = get_temperatures(client)
 
     if show_all:
         # Query all temperature-related objects
         try:
-            objects = client.printer_objects_list()  # type: ignore[attr-defined]
+            objects = client.printer_objects_list()
             temp_objects: dict[str, list[str] | None] = {}
             for obj in objects:
                 if any(
@@ -161,7 +162,7 @@ def _show_temps(client: object, show_all: bool) -> None:
                 ):
                     temp_objects[obj] = ["temperature", "target", "power"]
             if temp_objects:
-                result = client.printer_objects_query(temp_objects)  # type: ignore[attr-defined]
+                result = client.printer_objects_query(temp_objects)
                 status = result.get("status", {})
                 for name, data in status.items():
                     if isinstance(data, dict) and "temperature" in data:

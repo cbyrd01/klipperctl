@@ -65,7 +65,8 @@ class AliasGroup(click.Group):
         if cmd_name in COMMAND_GROUPS:
             module_path, attr_name = COMMAND_GROUPS[cmd_name]
             module = importlib.import_module(module_path)
-            return getattr(module, attr_name)
+            cmd_obj: click.Command = getattr(module, attr_name)
+            return cmd_obj
         return None
 
 

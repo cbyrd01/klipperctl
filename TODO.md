@@ -22,11 +22,11 @@
 - [x] 3-tests. Run tests, ruff, mypy and commit
 
 ## Phase 4: Type Safety
-- [ ] 4a. Fix `client: object` parameter types
-- [ ] 4b. Type `human_fn` properly in output.py
-- [ ] 4c. Type `_write_toml` file parameter
-- [ ] 4d. Tighten mypy configuration
-- [ ] 4-tests. Run mypy and tests, commit
+- [x] 4a. Fix `client: object` parameter types
+- [x] 4b. Type `human_fn` properly in output.py
+- [x] 4c. Type `_write_toml` file parameter
+- [x] 4d. Tighten mypy configuration
+- [x] 4-tests. Run mypy and tests, commit
 
 ## Phase 5: Code Organization & DRY
 - [ ] 5a. Extract response unwrapping helper

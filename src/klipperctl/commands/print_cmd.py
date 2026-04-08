@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 import click
+from moonraker_client import MoonrakerClient
 from moonraker_client.exceptions import MoonrakerError
 from moonraker_client.helpers import (
     get_print_progress,
@@ -127,9 +128,9 @@ def progress(ctx: click.Context, watch: bool, interval: float) -> None:
         _handle_error(ctx, e)
 
 
-def _show_progress(client: object) -> None:
+def _show_progress(client: MoonrakerClient) -> None:
     """Fetch and display print progress."""
-    prog = get_print_progress(client)  # type: ignore[arg-type]
+    prog = get_print_progress(client)
 
     if prog is None:
         if is_json_mode():
