@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "klipperctl"
+version = "0.1.0"
+description = "Command line interface for 3D printers using Moonraker and Klipper"
+readme = "README.md"
+license = "GPL-3.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "Christopher Byrd" },
+]
+keywords = ["moonraker", "klipper", "3d-printing", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Printing",
+]
+dependencies = [
+    "click>=8.1",
+    "rich>=13.0",
+    "moonraker-client>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+klipperctl = "klipperctl.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/cbyrd01/mooncli"
+Repository = "https://github.com/cbyrd01/mooncli"
+Issues = "https://github.com/cbyrd01/mooncli/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/klipperctl"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "functional: tests that require a live Moonraker server",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "tomllib"
+ignore_missing_imports = true

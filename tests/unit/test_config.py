@@ -1,0 +1,93 @@
+"""Tests for configuration management."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from klipperctl.config import (
+    get_printer_api_key,
+    get_printer_url,
+    load_config,
+    save_config,
+)
+
+
+class TestLoadConfig:
+    def test_returns_empty_when_no_file(self, tmp_path: Path, monkeypatch: object) -> None:
+        import klipperctl.config as cfg
+
+        monkeypatch.setattr(cfg, "_config_path", lambda: tmp_path / "nonexistent" / "config.toml")  # type: ignore[attr-defined]
+        assert load_config() == {}
+
+    def test_loads_valid_toml(self, tmp_path: Path, monkeypatch: object) -> None:
+        import klipperctl.config as cfg
+
+        config_file = tmp_path / "config.toml"
+        config_file.write_text('default_printer = "myprinter"\n')
+        monkeypatch.setattr(cfg, "_config_path", lambda: config_file)  # type: ignore[attr-defined]
+        result = load_config()
+        assert result["default_printer"] == "myprinter"
+
+
+class TestSaveConfig:
+    def test_creates_directory_and_file(self, tmp_path: Path, monkeypatch: object) -> None:
+        import klipperctl.config as cfg
+
+        config_file = tmp_path / "subdir" / "config.toml"
+        monkeypatch.setattr(cfg, "_config_path", lambda: config_file)  # type: ignore[attr-defined]
+        save_config({"default_printer": "test", "timeout": 30})
+        assert config_file.exists()
+        content = config_file.read_text()
+        assert 'default_printer = "test"' in content
+        assert "timeout = 30" in content
+
+    def test_roundtrip(self, tmp_path: Path, monkeypatch: object) -> None:
+        import klipperctl.config as cfg
+
+        config_file = tmp_path / "config.toml"
+        monkeypatch.setattr(cfg, "_config_path", lambda: config_file)  # type: ignore[attr-defined]
+        original = {
+            "default_printer": "voron",
+            "printers": {
+                "voron": {
+                    "url": "http://voron.local:7125",
+                    "api_key": "abc123",
+                },
+            },
+        }
+        save_config(original)
+        loaded = load_config()
+        assert loaded["default_printer"] == "voron"
+        assert loaded["printers"]["voron"]["url"] == "http://voron.local:7125"
+
+
+class TestGetPrinterUrl:
+    def test_returns_url_from_config(self) -> None:
+        config = {
+            "default_printer": "myprinter",
+            "printers": {"myprinter": {"url": "http://printer:7125"}},
+        }
+        assert get_printer_url(config) == "http://printer:7125"
+
+    def test_returns_none_when_no_default(self) -> None:
+        assert get_printer_url({}) is None
+
+    def test_returns_none_when_printer_missing(self) -> None:
+        config = {"default_printer": "missing"}
+        assert get_printer_url(config) is None
+
+
+class TestGetPrinterApiKey:
+    def test_returns_key(self) -> None:
+        config = {
+            "default_printer": "p1",
+            "printers": {"p1": {"api_key": "secret"}},
+        }
+        assert get_printer_api_key(config) == "secret"
+
+    def test_returns_none_when_no_key(self) -> None:
+        config = {
+            "default_printer": "p1",
+            "printers": {"p1": {"url": "http://x"}},
+        }
+        assert get_printer_api_key(config) is None
