@@ -14,6 +14,7 @@ from klipperctl.output import (
     output,
     output_json,
     print_table,
+    unwrap_result,
 )
 
 
@@ -35,7 +36,7 @@ def status(ctx: click.Context, refresh: bool) -> None:
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    version_info = data.get("version_info", data) if isinstance(data, dict) else data
+    version_info = unwrap_result(data, "version_info")
 
     def _human(vi: dict) -> None:
         table = make_table("Component", "Version", "Remote", "Status")

@@ -9,6 +9,7 @@ from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
 from klipperctl.output import (
     console,
+    format_timestamp,
     is_json_mode,
     make_table,
     output,
@@ -42,7 +43,6 @@ def status(ctx: click.Context) -> None:
             console.print()
             table = make_table("ID", "Filename", "Added")
             for job in jobs:
-                from klipperctl.output import format_timestamp
 
                 table.add_row(
                     job.get("job_id", "?")[:8],

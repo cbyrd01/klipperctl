@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import time
 
 import click
 from moonraker_client import MoonrakerClient
@@ -33,6 +32,8 @@ from klipperctl.output import (
     output_error,
     output_json,
     print_table,
+    unwrap_result,
+    watch_loop,
 )
 
 
@@ -129,11 +130,7 @@ def temps(ctx: click.Context, show_all: bool, watch: bool, interval: float) -> N
         client = get_client(ctx)
         _show_temps(client, show_all)
         if watch:
-            while True:
-                time.sleep(interval)
-                if not is_json_mode():
-                    click.clear()
-                _show_temps(client, show_all)
+            watch_loop(lambda: _show_temps(client, show_all), interval)
     except KeyboardInterrupt:
         pass
     except (MoonrakerError, click.Abort, OSError) as e:
@@ -311,7 +308,7 @@ def objects(ctx: click.Context) -> None:
         _handle_error(ctx, e)
 
     # API returns {"objects": [...]} — unwrap to the list
-    obj_list = result.get("objects", result) if isinstance(result, dict) else result
+    obj_list = unwrap_result(result, "objects")
 
     def _human(data: list) -> None:
         for obj in sorted(data):

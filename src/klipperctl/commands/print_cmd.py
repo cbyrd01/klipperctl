@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import time
-
 import click
 from moonraker_client import MoonrakerClient
 from moonraker_client.exceptions import MoonrakerError
@@ -20,6 +18,7 @@ from klipperctl.output import (
     is_json_mode,
     output,
     output_json,
+    watch_loop,
 )
 
 
@@ -117,11 +116,7 @@ def progress(ctx: click.Context, watch: bool, interval: float) -> None:
         client = get_client(ctx)
         _show_progress(client)
         if watch:
-            while True:
-                time.sleep(interval)
-                if not is_json_mode():
-                    click.clear()
-                _show_progress(client)
+            watch_loop(lambda: _show_progress(client), interval)
     except KeyboardInterrupt:
         pass
     except (MoonrakerError, click.Abort, OSError) as e:

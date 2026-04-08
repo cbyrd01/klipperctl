@@ -9,6 +9,7 @@ from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
 from klipperctl.output import (
     console,
+    format_timestamp,
     is_json_mode,
     output,
     output_json,
@@ -89,8 +90,6 @@ def whoami(ctx: click.Context) -> None:
         console.print(f"  Source:    {data.get('source', '?')}")
         created = data.get("created_on")
         if created:
-            from klipperctl.output import format_timestamp
-
             console.print(f"  Created:   {format_timestamp(created)}")
 
     output(data, _human)

@@ -29,11 +29,11 @@
 - [x] 4-tests. Run mypy and tests, commit
 
 ## Phase 5: Code Organization & DRY
-- [ ] 5a. Extract response unwrapping helper
-- [ ] 5b. Extract watch/poll loop
-- [ ] 5c. Move inline imports to module level
-- [ ] 5d. moonraker-client: Add async helper functions
-- [ ] 5-tests. Run full test suites, commit
+- [x] 5a. Extract response unwrapping helper
+- [x] 5b. Extract watch/poll loop
+- [x] 5c. Move inline imports to module level
+- [x] 5d. moonraker-client: Add async helper functions
+- [x] 5-tests. Run full test suites, commit
 
 ## Phase 6: Tooling, Tests & Documentation
 - [ ] 6a. Enable additional Ruff rules

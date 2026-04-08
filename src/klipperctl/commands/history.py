@@ -16,6 +16,7 @@ from klipperctl.output import (
     output,
     output_json,
     print_table,
+    unwrap_result,
 )
 
 
@@ -50,7 +51,7 @@ def list_jobs(
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    jobs = result.get("jobs", result) if isinstance(result, dict) else result
+    jobs = unwrap_result(result, "jobs")
 
     def _human(jobs: list) -> None:
         if not jobs:
@@ -81,7 +82,7 @@ def show(ctx: click.Context, job_id: str) -> None:
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    job = result.get("job", result) if isinstance(result, dict) else result
+    job = unwrap_result(result, "job")
 
     def _human(job: dict) -> None:
         console.print(f"[bold]{job.get('filename', '?')}[/bold]")
@@ -114,7 +115,7 @@ def totals(ctx: click.Context) -> None:
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    data = result.get("job_totals", result) if isinstance(result, dict) else result
+    data = unwrap_result(result, "job_totals")
 
     def _human(data: dict) -> None:
         console.print("[bold]Print Totals[/bold]")

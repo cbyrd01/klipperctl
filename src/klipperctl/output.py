@@ -7,6 +7,7 @@ should go through these helpers to ensure consistent behavior.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -125,6 +126,17 @@ def is_json_mode() -> bool:
     return bool(ctx and ctx.find_root().params.get("json_output"))
 
 
+def unwrap_result(result: Any, key: str) -> Any:
+    """Extract a key from an API response dict, or return as-is.
+
+    Moonraker responses are sometimes wrapped in a dict with a single key.
+    This helper safely unwraps them.
+    """
+    if isinstance(result, dict):
+        return result.get(key, result)
+    return result
+
+
 def output(data: Any, human_fn: Callable[[Any], None] | None = None) -> None:
     """Output data in JSON or human-readable format.
 
@@ -139,3 +151,17 @@ def output(data: Any, human_fn: Callable[[Any], None] | None = None) -> None:
         human_fn(data)
     else:
         click.echo(data)
+
+
+def watch_loop(fn: Callable[[], None], interval: float) -> None:
+    """Run fn repeatedly, clearing the screen between iterations.
+
+    Args:
+        fn: Function to call on each iteration.
+        interval: Seconds between iterations.
+    """
+    while True:
+        time.sleep(interval)
+        if not is_json_mode():
+            click.clear()
+        fn()

@@ -14,6 +14,7 @@ from klipperctl.output import (
     output,
     output_json,
     print_table,
+    unwrap_result,
 )
 
 
@@ -32,7 +33,7 @@ def list_devices(ctx: click.Context) -> None:
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    devices = data.get("devices", data) if isinstance(data, dict) else data
+    devices = unwrap_result(data, "devices")
 
     def _human(devices: list) -> None:
         if not devices:
@@ -66,7 +67,7 @@ def status(ctx: click.Context, device: str | None, show_all: bool) -> None:
         devices: list = []
         if show_all:
             raw = client.power_devices_list()
-            devices = raw.get("devices", raw) if isinstance(raw, dict) else raw
+            devices = unwrap_result(raw, "devices")
         else:
             data = client.power_device_status(device)  # type: ignore[arg-type]
             devices = [data] if isinstance(data, dict) else []

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import time
-
 import click
 from moonraker_client import MoonrakerClient
 from moonraker_client.exceptions import MoonrakerError
@@ -20,6 +18,8 @@ from klipperctl.output import (
     output,
     output_json,
     print_table,
+    unwrap_result,
+    watch_loop,
 )
 
 
@@ -38,7 +38,7 @@ def info(ctx: click.Context) -> None:
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    sys_info = data.get("system_info", data) if isinstance(data, dict) else data
+    sys_info = unwrap_result(data, "system_info")
 
     def _human(si: dict) -> None:
         console.print("[bold]System Information[/bold]")
@@ -72,11 +72,7 @@ def health(ctx: click.Context, watch: bool, interval: float) -> None:
         client = get_client(ctx)
         _show_health(client)
         if watch:
-            while True:
-                time.sleep(interval)
-                if not is_json_mode():
-                    click.clear()
-                _show_health(client)
+            watch_loop(lambda: _show_health(client), interval)
     except KeyboardInterrupt:
         pass
     except (MoonrakerError, click.Abort, OSError) as e:
@@ -161,7 +157,7 @@ def services(ctx: click.Context) -> None:
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    si = data.get("system_info", data) if isinstance(data, dict) else data
+    si = unwrap_result(data, "system_info")
     svc_state = si.get("service_state", {})
 
     def _human(svc_state: dict) -> None:

@@ -13,6 +13,7 @@ from klipperctl.output import (
     is_json_mode,
     output,
     output_json,
+    unwrap_result,
 )
 
 
@@ -96,7 +97,7 @@ def logs(ctx: click.Context, count: int | None) -> None:
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    entries = result.get("gcode_store", result) if isinstance(result, dict) else result
+    entries = unwrap_result(result, "gcode_store")
 
     def _human(entries: list) -> None:
         if not entries:
@@ -139,7 +140,7 @@ def announcements(ctx: click.Context, include_dismissed: bool) -> None:
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
-    entries = result.get("entries", result) if isinstance(result, dict) else result
+    entries = unwrap_result(result, "entries")
 
     def _human(entries: list) -> None:
         if not entries:
