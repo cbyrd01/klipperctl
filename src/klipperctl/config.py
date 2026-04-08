@@ -1,12 +1,17 @@
 """Configuration management for klipperctl.
 
-Reads and writes ~/.config/klipperctl/config.toml for persistent settings
-like printer profiles.
+Reads and writes a config.toml for persistent settings like printer profiles.
+
+Config location by platform:
+  - Linux:   $XDG_CONFIG_HOME/klipperctl/ or ~/.config/klipperctl/
+  - macOS:   ~/Library/Application Support/klipperctl/
+  - Windows: %APPDATA%/klipperctl/
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import IO, Any
 
@@ -14,10 +19,24 @@ import tomllib
 
 
 def _config_dir() -> Path:
-    """Get the configuration directory, respecting XDG_CONFIG_HOME."""
+    """Get the platform-appropriate configuration directory."""
+    # Respect explicit XDG override on any platform
     xdg = os.environ.get("XDG_CONFIG_HOME")
     if xdg:
         return Path(xdg) / "klipperctl"
+
+    if sys.platform == "win32":
+        # Windows: %APPDATA%\klipperctl
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "klipperctl"
+        return Path.home() / "AppData" / "Roaming" / "klipperctl"
+
+    if sys.platform == "darwin":
+        # macOS: ~/Library/Application Support/klipperctl
+        return Path.home() / "Library" / "Application Support" / "klipperctl"
+
+    # Linux and other Unix: ~/.config/klipperctl
     return Path.home() / ".config" / "klipperctl"
 
 
@@ -35,17 +54,31 @@ def load_config() -> dict[str, Any]:
         return result
 
 
+def _set_restrictive_permissions(path: Path) -> None:
+    """Set restrictive file/dir permissions where supported (Unix only).
+
+    On Windows, file permissions are managed by ACLs and os.chmod only
+    affects the read-only flag, so we skip it.
+    """
+    if sys.platform == "win32":
+        return
+    if path.is_dir():
+        os.chmod(path, 0o700)
+    else:
+        os.chmod(path, 0o600)
+
+
 def save_config(config: dict[str, Any]) -> None:
     """Save configuration to disk in TOML format.
 
-    Sets restrictive permissions (0o600) since config may contain API keys.
+    On Unix, sets restrictive permissions (0o600) since config may contain API keys.
     """
     path = _config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
+    _set_restrictive_permissions(path.parent)
     with open(path, "w") as f:
         _write_toml(f, config)
-    os.chmod(path, 0o600)
+    _set_restrictive_permissions(path)
 
 
 def _write_toml(f: IO[str], data: dict[str, Any], prefix: str = "") -> None:

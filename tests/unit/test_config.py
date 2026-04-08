@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 from pathlib import Path
+
+import pytest
 
 from klipperctl.config import (
     get_printer_api_key,
@@ -43,6 +46,9 @@ class TestSaveConfig:
         assert 'default_printer = "test"' in content
         assert "timeout = 30" in content
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Unix permissions not available on Windows"
+    )
     def test_sets_restrictive_permissions(self, tmp_path: Path, monkeypatch: object) -> None:
         import klipperctl.config as cfg
 
@@ -101,6 +107,32 @@ class TestConfigEdgeCases:
         assert config_file.exists()
         loaded = load_config()
         assert loaded["default_printer"] == "test"
+
+    def test_config_dir_respects_platform(self, monkeypatch: object) -> None:
+        from klipperctl.config import _config_dir
+
+        # XDG override should work on any platform
+        monkeypatch.setenv("XDG_CONFIG_HOME", "/custom/config")
+        assert _config_dir() == Path("/custom/config/klipperctl")
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only test")
+    def test_config_dir_windows_appdata(self, monkeypatch: object) -> None:
+        from klipperctl.config import _config_dir
+
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("APPDATA", r"C:\Users\test\AppData\Roaming")
+        result = _config_dir()
+        assert "klipperctl" in str(result)
+        assert "AppData" in str(result)
+
+    @pytest.mark.skipif(sys.platform != "darwin", reason="macOS-only test")
+    def test_config_dir_macos(self, monkeypatch: object) -> None:
+        from klipperctl.config import _config_dir
+
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        result = _config_dir()
+        assert "Library" in str(result)
+        assert "Application Support" in str(result)
 
     def test_empty_config_file(self, tmp_path: Path, monkeypatch: object) -> None:
         import klipperctl.config as cfg

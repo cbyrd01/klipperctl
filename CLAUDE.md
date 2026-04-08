@@ -45,7 +45,7 @@ mypy src/klipperctl/
 - `src/klipperctl/cli.py` — Root click.Group with global options (--url, --json, --timeout), alias expansion, lazy command loading, and error handling
 - `src/klipperctl/client.py` — MoonrakerClient construction from flags/env/config (priority: flags > env > config > defaults)
 - `src/klipperctl/output.py` — Output formatting: JSON mode, Rich tables/console, unit conversions (duration, bytes, temp, percent, timestamp)
-- `src/klipperctl/config.py` — Config file management (~/.config/klipperctl/config.toml) with TOML read/write
+- `src/klipperctl/config.py` — Config file management with TOML read/write. Platform-aware paths: Linux `~/.config/klipperctl/`, macOS `~/Library/Application Support/klipperctl/`, Windows `%APPDATA%/klipperctl/`
 - `src/klipperctl/commands/` — One module per command group (11 total):
   - `printer.py` — Printer state, temps, GCode, restart, emergency stop
   - `print_cmd.py` — Print start/pause/resume/cancel/progress
