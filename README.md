@@ -25,7 +25,7 @@ git clone https://github.com/cbyrd01/klipperctl.git
 cd klipperctl
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pip install -e "../moonraker-api-client"  # sibling library dependency
+pip install -e "../moonraker-client"  # sibling library dependency
 ```
 
 ## Quick Start

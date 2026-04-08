@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`klipperctl` is a Python CLI for controlling 3D printers running Klipper via the Moonraker API. It wraps the `moonraker-client` library (at `../moonraker-api-client/`) into user-friendly commands with Rich output and JSON pipeline support.
+`klipperctl` is a Python CLI for controlling 3D printers running Klipper via the Moonraker API. It wraps the `moonraker-client` library (at `../moonraker-client/`) into user-friendly commands with Rich output and JSON pipeline support.
 
 ## Build & Run Commands
 
@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Setup
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pip install -e "../moonraker-api-client"  # sibling library dependency
+pip install -e "../moonraker-client"  # sibling library dependency
 
 # Run
 klipperctl --help
