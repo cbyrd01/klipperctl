@@ -324,7 +324,7 @@ def objects(ctx: click.Context) -> None:
 def query(ctx: click.Context, object_names: tuple[str, ...], attrs: str | None) -> None:
     """Query specific printer objects."""
     attr_list = attrs.split(",") if attrs else None
-    objects_dict: dict[str, list[str] | None] = {name: attr_list for name in object_names}
+    objects_dict: dict[str, list[str] | None] = {name: attr_list for name in object_names}  # noqa: C420
 
     try:
         client = get_client(ctx)
@@ -400,10 +400,7 @@ def firmware_restart_cmd(ctx: click.Context, wait: bool, wait_timeout: float) ->
             if not is_json_mode():
                 console.print("Restarting firmware...")
             reached = restart_firmware(client, timeout=wait_timeout)
-            if reached:
-                msg = "Firmware restarted successfully."
-            else:
-                msg = "Firmware restart timed out."
+            msg = "Firmware restarted successfully." if reached else "Firmware restart timed out."
             if is_json_mode():
                 output_json({"result": "ok" if reached else "timeout"})
             else:

@@ -100,7 +100,7 @@ def cancel(ctx: click.Context, yes: bool) -> None:
             console.print("Print cancelled.")
     except click.Abort:
         raise
-    except (MoonrakerError, click.Abort, OSError) as e:
+    except (MoonrakerError, OSError) as e:
         _handle_error(ctx, e)
 
 

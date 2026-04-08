@@ -89,13 +89,13 @@ def show(ctx: click.Context, job_id: str) -> None:
         console.print(f"  Status:     {job.get('status', '?')}")
         if "start_time" in job:
             console.print(f"  Started:    {format_timestamp(job['start_time'])}")
-        if "end_time" in job and job["end_time"]:
+        if job.get("end_time"):
             console.print(f"  Ended:      {format_timestamp(job['end_time'])}")
         console.print(f"  Duration:   {format_duration(job.get('print_duration', 0))}")
         console.print(f"  Total Time: {format_duration(job.get('total_duration', 0))}")
         filament = job.get("filament_used", 0) / 1000
         console.print(f"  Filament:   {filament:.1f}m")
-        if "metadata" in job and job["metadata"]:
+        if job.get("metadata"):
             meta = job["metadata"]
             if "slicer" in meta:
                 console.print(f"  Slicer:     {meta['slicer']}")

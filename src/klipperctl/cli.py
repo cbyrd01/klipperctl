@@ -47,7 +47,7 @@ class AliasGroup(click.Group):
         if args and args[0] in ALIASES:
             alias = args[0]
             group_name, cmd_name, extra = ALIASES[alias]
-            args = [group_name, cmd_name] + extra + args[1:]
+            args = [group_name, cmd_name, *extra, *args[1:]]
         return super().resolve_command(ctx, args)
 
     def list_commands(self, ctx: click.Context) -> list[str]:

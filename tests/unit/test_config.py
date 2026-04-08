@@ -90,6 +90,28 @@ class TestGetPrinterUrl:
         assert get_printer_url(config) is None
 
 
+class TestConfigEdgeCases:
+    def test_xdg_config_home(self, tmp_path: Path, monkeypatch: object) -> None:
+        import klipperctl.config as cfg
+
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        config_file = tmp_path / "klipperctl" / "config.toml"
+        monkeypatch.setattr(cfg, "_config_path", lambda: config_file)  # type: ignore[attr-defined]
+        save_config({"default_printer": "test"})
+        assert config_file.exists()
+        loaded = load_config()
+        assert loaded["default_printer"] == "test"
+
+    def test_empty_config_file(self, tmp_path: Path, monkeypatch: object) -> None:
+        import klipperctl.config as cfg
+
+        config_file = tmp_path / "config.toml"
+        config_file.write_text("")
+        monkeypatch.setattr(cfg, "_config_path", lambda: config_file)  # type: ignore[attr-defined]
+        result = load_config()
+        assert result == {}
+
+
 class TestGetPrinterApiKey:
     def test_returns_key(self) -> None:
         config = {

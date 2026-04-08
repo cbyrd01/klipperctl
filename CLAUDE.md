@@ -64,12 +64,16 @@ mypy src/klipperctl/
 - **Global --json flag**: When set, all commands output JSON to stdout. Errors go to stderr as JSON. Without it, Rich tables and colored output are used.
 - **Exit codes**: 0=success, 1=API error, 2=connection/auth/timeout error, 3=user error, 130=interrupted
 - **Client lifecycle**: `get_client(ctx)` in client.py lazily creates and caches a MoonrakerClient on the Click context, with automatic cleanup via `ctx.call_on_close`.
-- **Error handling**: `_handle_error()` in cli.py maps moonraker-client exceptions to exit codes and user-friendly messages. All commands catch exceptions and delegate to this function.
+- **Error handling**: `_handle_error()` in cli.py maps moonraker-client exceptions to exit codes and user-friendly messages. All commands catch specific exceptions `(MoonrakerError, click.Abort, OSError)` and delegate to this function.
 - **Alias expansion**: `AliasGroup.resolve_command()` rewrites top-level shortcuts (e.g., `status` -> `printer status`) before Click resolves the command.
 - **Lazy loading**: Command groups are loaded on demand via `COMMAND_GROUPS` dict in cli.py using `importlib.import_module()` for fast startup.
 - **Commands use helpers**: Prefer `moonraker_client.helpers` functions (get_printer_status, get_temperatures, start_print, etc.) over raw API calls where available.
 - **Output pattern**: Each command calls `output(data, human_fn)` — in JSON mode it serializes `data`, otherwise it calls `human_fn` for Rich-formatted output.
-- **Destructive commands**: Require `--yes` flag or interactive confirmation (emergency-stop, cancel, delete, shutdown, reboot, reset-totals).
+- **Response unwrapping**: Use `unwrap_result(result, key)` from output.py to extract nested API responses instead of inline isinstance/get patterns.
+- **Watch loops**: Use `watch_loop(fn, interval)` from output.py for `--watch` polling commands (temps, health, progress).
+- **Destructive commands**: Require `--yes` flag or interactive confirmation (emergency-stop, cancel, delete, shutdown, reboot, reset-totals, power on/off).
+- **Config security**: Config files are written with 0o600 permissions (directory 0o700) since they may contain API keys.
+- **Path validation**: File download operations validate remote filenames and output paths against path traversal.
 
 ### Dependencies
 
@@ -80,7 +84,7 @@ mypy src/klipperctl/
 
 ### Test Structure
 
-- `tests/unit/` — Click CliRunner tests with mocked MoonrakerClient (122 tests)
+- `tests/unit/` — Click CliRunner tests with mocked MoonrakerClient (141 tests)
   - `test_output.py` — Unit conversion formatting
   - `test_config.py` — Config file read/write/roundtrip
   - `test_cli.py` — Help output, alias expansion

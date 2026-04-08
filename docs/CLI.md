@@ -834,18 +834,18 @@ One of `DEVICE` or `--all` is required.
 
 ### power on
 
-Turn on a power device.
+Turn on a power device. Requires confirmation (use `--yes` to skip).
 
 ```
-klipperctl power on DEVICE
+klipperctl power on DEVICE [--yes]
 ```
 
 ### power off
 
-Turn off a power device.
+Turn off a power device. Requires confirmation (use `--yes` to skip).
 
 ```
-klipperctl power off DEVICE
+klipperctl power off DEVICE [--yes]
 ```
 
 ---

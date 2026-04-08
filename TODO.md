@@ -36,9 +36,9 @@
 - [x] 5-tests. Run full test suites, commit
 
 ## Phase 6: Tooling, Tests & Documentation
-- [ ] 6a. Enable additional Ruff rules
-- [ ] 6b. Fill test coverage gaps (klipperctl)
-- [ ] 6c. Fill test coverage gaps (moonraker-client)
-- [ ] 6d. Update documentation (CLAUDE.md, README.md, docs/CLI.md)
-- [ ] 6e. Final test run (unit + functional if available)
+- [x] 6a. Enable additional Ruff rules
+- [x] 6b. Fill test coverage gaps (klipperctl)
+- [x] 6c. Fill test coverage gaps (moonraker-client)
+- [x] 6d. Update documentation (CLAUDE.md, README.md, docs/CLI.md)
+- [x] 6e. Final test run (unit + functional if available)
 - [ ] 6f. Final commit and remove this TODO.md
