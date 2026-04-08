@@ -86,7 +86,7 @@ def rollback(ctx: click.Context, name: str) -> None:
     """Rollback to previous version."""
     try:
         client = get_client(ctx)
-        result = client.machine_update_rollback()
+        result = client.machine_update_rollback(name)
     except Exception as e:
         _handle_error(ctx, e)
 

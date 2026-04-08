@@ -226,6 +226,18 @@ class TestUpdateUpgrade:
         assert result.exit_code == 0
 
 
+class TestUpdateRollback:
+    def test_rollback_passes_name(self) -> None:
+        client = _mock_client()
+        result = _invoke(["update", "rollback", "klipper"], mock_client=client)
+        assert result.exit_code == 0
+        client.machine_update_rollback.assert_called_once_with("klipper")
+
+    def test_rollback_json(self) -> None:
+        result = _invoke(["--json", "update", "rollback", "moonraker"])
+        assert result.exit_code == 0
+
+
 class TestPowerList:
     def test_human(self) -> None:
         result = _invoke(["power", "list"])
