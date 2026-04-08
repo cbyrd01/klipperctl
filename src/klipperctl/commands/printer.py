@@ -6,6 +6,7 @@ import sys
 import time
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 from moonraker_client.helpers import (
     PrinterStatus,
     TemperatureReading,
@@ -46,7 +47,7 @@ def status(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         st = get_printer_status(client)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(st: PrinterStatus) -> None:
@@ -104,7 +105,7 @@ def info(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.printer_info()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(data: dict) -> None:
@@ -134,7 +135,7 @@ def temps(ctx: click.Context, show_all: bool, watch: bool, interval: float) -> N
                 _show_temps(client, show_all)
     except KeyboardInterrupt:
         pass
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -249,7 +250,7 @@ def set_temp(
 
         if is_json_mode():
             output_json({"targets": targets, "wait": wait})
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -270,7 +271,7 @@ def gcode(ctx: click.Context, script: str | None) -> None:
         client = get_client(ctx)
         result = send_gcode(client, script)
         output({"result": result}, lambda d: console.print("OK"))
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -282,7 +283,7 @@ def gcode_help(ctx: click.Context, name_filter: str | None) -> None:
     try:
         client = get_client(ctx)
         data = client.gcode_help()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if name_filter:
@@ -305,7 +306,7 @@ def objects(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         result = client.printer_objects_list()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     # API returns {"objects": [...]} — unwrap to the list
@@ -330,7 +331,7 @@ def query(ctx: click.Context, object_names: tuple[str, ...], attrs: str | None) 
     try:
         client = get_client(ctx)
         result = client.printer_objects_query(objects_dict)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     data = result.get("status", result)
@@ -354,7 +355,7 @@ def endstops(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.query_endstops()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(data: dict) -> None:
@@ -378,7 +379,7 @@ def restart(ctx: click.Context) -> None:
             console.print("Klipper restart requested.")
         else:
             output_json({"result": "ok"})
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -418,7 +419,7 @@ def firmware_restart_cmd(ctx: click.Context, wait: bool, wait_timeout: float) ->
                 output_json({"result": "ok"})
             else:
                 console.print("Firmware restart requested.")
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -442,5 +443,5 @@ def emergency_stop(ctx: click.Context, yes: bool) -> None:
             output_json({"result": "ok"})
         else:
             console.print("[red]Emergency stop executed.[/red]")
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)

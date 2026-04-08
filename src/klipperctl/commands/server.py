@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -27,7 +28,7 @@ def info(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.server_info()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(data: dict) -> None:
@@ -53,7 +54,7 @@ def config(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.server_config()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(data: dict) -> None:
@@ -75,7 +76,7 @@ def restart(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         client.server_restart()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -92,7 +93,7 @@ def logs(ctx: click.Context, count: int | None) -> None:
     try:
         client = get_client(ctx)
         result = client.server_gcodestore(count=count)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     entries = result.get("gcode_store", result) if isinstance(result, dict) else result
@@ -118,7 +119,7 @@ def logs_rollover(ctx: click.Context, application: str) -> None:
     try:
         client = get_client(ctx)
         client.server_logs_rollover(application=application)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -135,7 +136,7 @@ def announcements(ctx: click.Context, include_dismissed: bool) -> None:
     try:
         client = get_client(ctx)
         result = client.server_announcements_list(include_dismissed=include_dismissed)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     entries = result.get("entries", result) if isinstance(result, dict) else result
@@ -163,7 +164,7 @@ def dismiss(ctx: click.Context, entry_id: str) -> None:
     try:
         client = get_client(ctx)
         result = client.server_announcements_dismiss(entry_id)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():

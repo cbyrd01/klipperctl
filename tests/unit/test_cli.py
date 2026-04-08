@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from click.testing import CliRunner
+from moonraker_client.exceptions import (
+    MoonrakerAPIError,
+    MoonrakerAuthError,
+    MoonrakerConnectionError,
+    MoonrakerTimeoutError,
+)
 
 from klipperctl.cli import cli
 
@@ -65,3 +73,51 @@ class TestAliases:
         result = runner.invoke(cli, ["progress", "--help"])
         assert result.exit_code == 0
         assert "progress" in result.output.lower()
+
+
+def _mock_client_raising(exc: Exception) -> MagicMock:
+    client = MagicMock()
+    client.close.return_value = None
+    client.printer_info.side_effect = exc
+    client.server_info.side_effect = exc
+    client.printer_objects_query.side_effect = exc
+    return client
+
+
+class TestErrorHandling:
+    """Test that _handle_error maps exceptions to correct exit codes."""
+
+    def test_connection_error_exits_2(self) -> None:
+        client = _mock_client_raising(MoonrakerConnectionError("refused"))
+        runner = CliRunner()
+        with patch("klipperctl.client.build_client", return_value=client):
+            result = runner.invoke(cli, ["printer", "status"])
+        assert result.exit_code == 2
+
+    def test_auth_error_exits_2(self) -> None:
+        client = _mock_client_raising(MoonrakerAuthError("unauthorized", status_code=401))
+        runner = CliRunner()
+        with patch("klipperctl.client.build_client", return_value=client):
+            result = runner.invoke(cli, ["printer", "status"])
+        assert result.exit_code == 2
+
+    def test_timeout_error_exits_2(self) -> None:
+        client = _mock_client_raising(MoonrakerTimeoutError("timed out"))
+        runner = CliRunner()
+        with patch("klipperctl.client.build_client", return_value=client):
+            result = runner.invoke(cli, ["printer", "status"])
+        assert result.exit_code == 2
+
+    def test_api_error_exits_1(self) -> None:
+        client = _mock_client_raising(MoonrakerAPIError("bad request", status_code=400))
+        runner = CliRunner()
+        with patch("klipperctl.client.build_client", return_value=client):
+            result = runner.invoke(cli, ["printer", "status"])
+        assert result.exit_code == 1
+
+    def test_json_mode_error_outputs_json(self) -> None:
+        client = _mock_client_raising(MoonrakerConnectionError("refused"))
+        runner = CliRunner()
+        with patch("klipperctl.client.build_client", return_value=client):
+            result = runner.invoke(cli, ["--json", "printer", "status"])
+        assert result.exit_code == 2

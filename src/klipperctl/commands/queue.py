@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -28,7 +29,7 @@ def status(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         result = client.server_jobqueue_status()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(result: dict) -> None:
@@ -62,7 +63,7 @@ def add(ctx: click.Context, files: tuple[str, ...], reset: bool) -> None:
     try:
         client = get_client(ctx)
         result = client.server_jobqueue_job(filenames=list(files), reset=reset)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -78,7 +79,7 @@ def start(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         result = client.server_jobqueue_start()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -94,7 +95,7 @@ def pause(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         result = client.server_jobqueue_pause()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -111,7 +112,7 @@ def jump(ctx: click.Context, job_id: str) -> None:
     try:
         client = get_client(ctx)
         result = client.server_jobqueue_jump(job_id)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -128,7 +129,7 @@ def remove(ctx: click.Context, job_ids: tuple[str, ...]) -> None:
     try:
         client = get_client(ctx)
         client.server_jobqueue_delete(list(job_ids))
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():

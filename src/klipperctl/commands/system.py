@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 from moonraker_client.helpers import get_system_health
 
 from klipperctl.cli import _handle_error
@@ -33,7 +34,7 @@ def info(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.machine_systeminfo()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     sys_info = data.get("system_info", data) if isinstance(data, dict) else data
@@ -77,7 +78,7 @@ def health(ctx: click.Context, watch: bool, interval: float) -> None:
                 _show_health(client)
     except KeyboardInterrupt:
         pass
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -121,7 +122,7 @@ def shutdown(ctx: click.Context, yes: bool) -> None:
     try:
         client = get_client(ctx)
         client.machine_shutdown()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -140,7 +141,7 @@ def reboot(ctx: click.Context, yes: bool) -> None:
     try:
         client = get_client(ctx)
         client.machine_reboot()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -156,7 +157,7 @@ def services(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.machine_systeminfo()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     si = data.get("system_info", data) if isinstance(data, dict) else data
@@ -191,7 +192,7 @@ def restart(ctx: click.Context, service: str) -> None:
     try:
         client = get_client(ctx)
         client.machine_services_restart(service)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -208,7 +209,7 @@ def stop(ctx: click.Context, service: str) -> None:
     try:
         client = get_client(ctx)
         client.machine_services_stop(service)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -225,7 +226,7 @@ def start(ctx: click.Context, service: str) -> None:
     try:
         client = get_client(ctx)
         client.machine_services_start(service)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -258,9 +259,9 @@ def peripherals(ctx: click.Context, device_type: str | None) -> None:
                     result["video"] = client.machine_peripherals_video()
                 elif dt == "canbus":
                     result["canbus"] = client.machine_peripherals_canbus()
-            except Exception:
+            except MoonrakerError:
                 result[dt] = []
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(result: dict) -> None:

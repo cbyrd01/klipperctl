@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -31,7 +32,7 @@ def status(ctx: click.Context, refresh: bool) -> None:
         if refresh:
             client.machine_update_refresh()
         data = client.machine_update_status()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     version_info = data.get("version_info", data) if isinstance(data, dict) else data
@@ -70,7 +71,7 @@ def upgrade(ctx: click.Context, name: str | None) -> None:
             target = name or "all components"
             console.print(f"Upgrading {target}...")
         result = client.machine_update_upgrade(name=name)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -87,7 +88,7 @@ def rollback(ctx: click.Context, name: str) -> None:
     try:
         client = get_client(ctx)
         result = client.machine_update_rollback(name)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -105,7 +106,7 @@ def recover(ctx: click.Context, name: str, hard: bool) -> None:
     try:
         client = get_client(ctx)
         result = client.machine_update_recover(name, hard=hard)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():

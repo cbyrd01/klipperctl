@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 from moonraker_client.helpers import (
     get_print_progress,
     start_print,
@@ -40,7 +41,7 @@ def start(ctx: click.Context, filename: str) -> None:
             console.print(f"Print started: {filename}")
     except FileNotFoundError as e:
         _handle_error(ctx, e)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -55,7 +56,7 @@ def pause(ctx: click.Context) -> None:
             output_json({"result": "ok"})
         else:
             console.print("Print paused.")
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -70,7 +71,7 @@ def resume(ctx: click.Context) -> None:
             output_json({"result": "ok"})
         else:
             console.print("Print resumed.")
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -99,7 +100,7 @@ def cancel(ctx: click.Context, yes: bool) -> None:
             console.print("Print cancelled.")
     except click.Abort:
         raise
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 
@@ -122,7 +123,7 @@ def progress(ctx: click.Context, watch: bool, interval: float) -> None:
                 _show_progress(client)
     except KeyboardInterrupt:
         pass
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
 

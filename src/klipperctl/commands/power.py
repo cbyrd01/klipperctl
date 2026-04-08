@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -28,7 +29,7 @@ def list_devices(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.power_devices_list()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     devices = data.get("devices", data) if isinstance(data, dict) else data
@@ -69,7 +70,7 @@ def status(ctx: click.Context, device: str | None, show_all: bool) -> None:
         else:
             data = client.power_device_status(device)  # type: ignore[arg-type]
             devices = [data] if isinstance(data, dict) else []
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(devices: list) -> None:
@@ -93,7 +94,7 @@ def on(ctx: click.Context, device: str, yes: bool) -> None:
     try:
         client = get_client(ctx)
         result = client.power_device_set(device, "on")
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -113,7 +114,7 @@ def off(ctx: click.Context, device: str, yes: bool) -> None:
     try:
         client = get_client(ctx)
         result = client.power_device_set(device, "off")
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():

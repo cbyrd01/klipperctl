@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -28,7 +29,7 @@ def login(ctx: click.Context, username: str, password: str) -> None:
     try:
         client = get_client(ctx)
         result = client.access_login(username, password)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -47,7 +48,7 @@ def logout(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         client.access_logout()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -63,7 +64,7 @@ def info(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.access_info()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(data: dict) -> None:
@@ -80,7 +81,7 @@ def whoami(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         data = client.access_user()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(data: dict) -> None:
@@ -102,7 +103,7 @@ def api_key(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         result = client.access_apikey()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():

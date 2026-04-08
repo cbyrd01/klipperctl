@@ -5,14 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 from moonraker_client.helpers import list_gcode_files, upload_gcode
-
-
-def _validate_remote_path(name: str) -> str:
-    """Reject remote filenames that contain path traversal sequences."""
-    if ".." in name:
-        raise click.BadParameter(f"Invalid remote path (contains '..'): {name}")
-    return name
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -27,6 +21,13 @@ from klipperctl.output import (
     output_json,
     print_table,
 )
+
+
+def _validate_remote_path(name: str) -> str:
+    """Reject remote filenames that contain path traversal sequences."""
+    if ".." in name:
+        raise click.BadParameter(f"Invalid remote path (contains '..'): {name}")
+    return name
 
 
 @click.group()
@@ -55,7 +56,7 @@ def list_files(ctx: click.Context, root: str, sort: str, long_format: bool) -> N
             file_list = client.files_list(root=root)
             reverse = sort == "modified"
             file_list = sorted(file_list, key=lambda f: f.get(sort, 0), reverse=reverse)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(file_list: list) -> None:
@@ -90,7 +91,7 @@ def info(ctx: click.Context, filename: str) -> None:
     try:
         client = get_client(ctx)
         data = client.files_metadata(filename)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(data: dict) -> None:
@@ -130,7 +131,7 @@ def upload(ctx: click.Context, file: str, remote_path: str | None, start_print: 
     try:
         client = get_client(ctx)
         result = upload_gcode(client, file, remote_path=remote_path, start=start_print)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(result: dict) -> None:
@@ -153,7 +154,7 @@ def download(ctx: click.Context, filename: str, output_path: str | None, root: s
     try:
         client = get_client(ctx)
         data = client.files_download(root, filename)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if output_path:
@@ -190,7 +191,7 @@ def delete(ctx: click.Context, filename: str, root: str, yes: bool) -> None:
     try:
         client = get_client(ctx)
         result = client.files_delete(root, filename)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -208,7 +209,7 @@ def move(ctx: click.Context, source: str, dest: str) -> None:
     try:
         client = get_client(ctx)
         result = client.files_move(source, dest)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -226,7 +227,7 @@ def copy(ctx: click.Context, source: str, dest: str) -> None:
     try:
         client = get_client(ctx)
         result = client.files_copy(source, dest)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -243,7 +244,7 @@ def mkdir(ctx: click.Context, path: str) -> None:
     try:
         client = get_client(ctx)
         result = client.files_create_directory(path)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -264,7 +265,7 @@ def rmdir(ctx: click.Context, path: str, force: bool, yes: bool) -> None:
     try:
         client = get_client(ctx)
         result = client.files_delete_directory(path, force=force)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():
@@ -281,7 +282,7 @@ def thumbnails(ctx: click.Context, filename: str) -> None:
     try:
         client = get_client(ctx)
         data = client.files_thumbnails(filename)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     def _human(data: list) -> None:
@@ -309,7 +310,7 @@ def scan(ctx: click.Context, filename: str) -> None:
     try:
         client = get_client(ctx)
         result = client.files_metascan(filename)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():

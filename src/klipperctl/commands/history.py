@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import click
+from moonraker_client.exceptions import MoonrakerError
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -46,7 +47,7 @@ def list_jobs(
     try:
         client = get_client(ctx)
         result = client.server_history_list(limit=limit, since=since, before=before, order=order)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     jobs = result.get("jobs", result) if isinstance(result, dict) else result
@@ -77,7 +78,7 @@ def show(ctx: click.Context, job_id: str) -> None:
     try:
         client = get_client(ctx)
         result = client.server_history_job(job_id)
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     job = result.get("job", result) if isinstance(result, dict) else result
@@ -110,7 +111,7 @@ def totals(ctx: click.Context) -> None:
     try:
         client = get_client(ctx)
         result = client.server_history_totals()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     data = result.get("job_totals", result) if isinstance(result, dict) else result
@@ -136,7 +137,7 @@ def reset_totals(ctx: click.Context, yes: bool) -> None:
     try:
         client = get_client(ctx)
         result = client.server_history_resettotals()
-    except Exception as e:
+    except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
     if is_json_mode():

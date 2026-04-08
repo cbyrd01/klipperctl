@@ -14,12 +14,12 @@
 - [x] 2-tests. Run tests in both repos and commit
 
 ## Phase 3: Error Handling Improvements
-- [ ] 3a. moonraker-client: Narrow exception catches in helpers.py
-- [ ] 3b. moonraker-client: Export `JsonRpcError` from public API
-- [ ] 3c. klipperctl: Narrow exception catches across all command modules
-- [ ] 3d. klipperctl: Improve peripheral enumeration error visibility
-- [ ] 3e. klipperctl: Add error-path tests
-- [ ] 3-tests. Run tests, ruff, mypy and commit
+- [x] 3a. moonraker-client: Narrow exception catches in helpers.py
+- [x] 3b. moonraker-client: Export `JsonRpcError` from public API
+- [x] 3c. klipperctl: Narrow exception catches across all command modules
+- [x] 3d. klipperctl: Improve peripheral enumeration error visibility
+- [x] 3e. klipperctl: Add error-path tests
+- [x] 3-tests. Run tests, ruff, mypy and commit
 
 ## Phase 4: Type Safety
 - [ ] 4a. Fix `client: object` parameter types
