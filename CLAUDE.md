@@ -40,7 +40,7 @@ mypy src/klipperctl/
 - `src/klipperctl/client.py` — MoonrakerClient construction from flags/env/config (priority: flags > env > config > defaults)
 - `src/klipperctl/output.py` — Output formatting: JSON mode, Rich tables, unit conversions (duration, bytes, temp)
 - `src/klipperctl/config.py` — Config file management (~/.config/klipperctl/config.toml)
-- `src/klipperctl/commands/` — One module per command group (printer, print_cmd, files, etc.)
+- `src/klipperctl/commands/` — One module per command group: printer, print_cmd, files, history, queue, server, system, update, power, auth, config_cmd
 
 ### Key Patterns
 
@@ -48,7 +48,8 @@ mypy src/klipperctl/
 - **Exit codes**: 0=success, 1=API error, 2=connection/auth/timeout error, 3=user error, 130=interrupted
 - **Client lifecycle**: `get_client(ctx)` lazily creates and caches a MoonrakerClient on the click context, with automatic cleanup.
 - **Error handling**: `_handle_error()` in cli.py maps moonraker-client exceptions to exit codes and user-friendly messages.
-- **Alias expansion**: AliasGroup.parse_args() rewrites top-level shortcuts (status → printer status) before dispatch.
+- **Alias expansion**: AliasGroup.resolve_command() rewrites top-level shortcuts (status → printer status) before dispatch.
+- **Lazy loading**: Command groups are loaded on demand via COMMAND_GROUPS dict in cli.py for fast startup.
 - **Commands use helpers**: Prefer `moonraker_client.helpers` functions over raw API calls where available.
 
 ### Dependencies

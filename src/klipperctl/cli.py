@@ -26,6 +26,14 @@ COMMAND_GROUPS: dict[str, tuple[str, str]] = {
     "printer": ("klipperctl.commands.printer", "printer"),
     "print": ("klipperctl.commands.print_cmd", "print_cmd"),
     "files": ("klipperctl.commands.files", "files"),
+    "history": ("klipperctl.commands.history", "history"),
+    "queue": ("klipperctl.commands.queue", "queue"),
+    "server": ("klipperctl.commands.server", "server"),
+    "system": ("klipperctl.commands.system", "system"),
+    "update": ("klipperctl.commands.update", "update"),
+    "power": ("klipperctl.commands.power", "power"),
+    "auth": ("klipperctl.commands.auth", "auth"),
+    "config": ("klipperctl.commands.config_cmd", "config_cmd"),
 }
 
 

@@ -10,9 +10,12 @@ from klipperctl.client import get_client
 from klipperctl.output import (
     console,
     format_bytes,
+    format_duration,
     format_timestamp,
+    is_json_mode,
     make_table,
     output,
+    output_json,
     print_table,
 )
 
@@ -92,8 +95,6 @@ def info(ctx: click.Context, filename: str) -> None:
         if "slicer_version" in data:
             console.print(f"  Slicer Version:  {data['slicer_version']}")
         if "estimated_time" in data:
-            from klipperctl.output import format_duration
-
             console.print(f"  Estimated Time:  {format_duration(data['estimated_time'])}")
         if "filament_total" in data:
             filament_m = data["filament_total"] / 1000.0
@@ -130,3 +131,170 @@ def upload(ctx: click.Context, file: str, remote_path: str | None, start_print: 
             console.print("Print started.")
 
     output(result, _human)
+
+
+@files.command()
+@click.argument("filename")
+@click.option("--output", "output_path", type=click.Path(), help="Local output path.")
+@click.option("--root", default="gcodes", show_default=True, help="Root directory.")
+@click.pass_context
+def download(ctx: click.Context, filename: str, output_path: str | None, root: str) -> None:
+    """Download a file from the printer."""
+    try:
+        client = get_client(ctx)
+        data = client.files_download(root, filename)
+    except Exception as e:
+        _handle_error(ctx, e)
+
+    if output_path:
+        with open(output_path, "wb" if isinstance(data, bytes) else "w") as f:
+            f.write(data)
+        if not is_json_mode():
+            console.print(f"Downloaded to: {output_path}")
+        else:
+            output_json({"path": output_path, "filename": filename})
+    else:
+        if is_json_mode():
+            output_json({"filename": filename, "size": len(data) if data else 0})
+        else:
+            click.echo(data)
+
+
+@files.command()
+@click.argument("filename")
+@click.option("--root", default="gcodes", show_default=True, help="Root directory.")
+@click.option("--yes", is_flag=True, help="Skip confirmation.")
+@click.pass_context
+def delete(ctx: click.Context, filename: str, root: str, yes: bool) -> None:
+    """Delete a file."""
+    if not yes:
+        click.confirm(f"Delete '{filename}' from {root}?", abort=True)
+    try:
+        client = get_client(ctx)
+        result = client.files_delete(root, filename)
+    except Exception as e:
+        _handle_error(ctx, e)
+
+    if is_json_mode():
+        output_json(result)
+    else:
+        console.print(f"Deleted: {filename}")
+
+
+@files.command()
+@click.argument("source")
+@click.argument("dest")
+@click.pass_context
+def move(ctx: click.Context, source: str, dest: str) -> None:
+    """Move or rename a file."""
+    try:
+        client = get_client(ctx)
+        result = client.files_move(source, dest)
+    except Exception as e:
+        _handle_error(ctx, e)
+
+    if is_json_mode():
+        output_json(result)
+    else:
+        console.print(f"Moved: {source} -> {dest}")
+
+
+@files.command()
+@click.argument("source")
+@click.argument("dest")
+@click.pass_context
+def copy(ctx: click.Context, source: str, dest: str) -> None:
+    """Copy a file."""
+    try:
+        client = get_client(ctx)
+        result = client.files_copy(source, dest)
+    except Exception as e:
+        _handle_error(ctx, e)
+
+    if is_json_mode():
+        output_json(result)
+    else:
+        console.print(f"Copied: {source} -> {dest}")
+
+
+@files.command()
+@click.argument("path")
+@click.pass_context
+def mkdir(ctx: click.Context, path: str) -> None:
+    """Create a directory."""
+    try:
+        client = get_client(ctx)
+        result = client.files_create_directory(path)
+    except Exception as e:
+        _handle_error(ctx, e)
+
+    if is_json_mode():
+        output_json(result)
+    else:
+        console.print(f"Created: {path}")
+
+
+@files.command()
+@click.argument("path")
+@click.option("--force", is_flag=True, help="Force delete non-empty directory.")
+@click.option("--yes", is_flag=True, help="Skip confirmation.")
+@click.pass_context
+def rmdir(ctx: click.Context, path: str, force: bool, yes: bool) -> None:
+    """Delete a directory."""
+    if not yes:
+        click.confirm(f"Delete directory '{path}'?", abort=True)
+    try:
+        client = get_client(ctx)
+        result = client.files_delete_directory(path, force=force)
+    except Exception as e:
+        _handle_error(ctx, e)
+
+    if is_json_mode():
+        output_json(result)
+    else:
+        console.print(f"Deleted: {path}")
+
+
+@files.command()
+@click.argument("filename")
+@click.pass_context
+def thumbnails(ctx: click.Context, filename: str) -> None:
+    """List thumbnails for a gcode file."""
+    try:
+        client = get_client(ctx)
+        data = client.files_thumbnails(filename)
+    except Exception as e:
+        _handle_error(ctx, e)
+
+    def _human(data: list) -> None:
+        if not data:
+            console.print("No thumbnails found.")
+            return
+        table = make_table("Width", "Height", "Size", "Type")
+        for t in data:
+            table.add_row(
+                str(t.get("width", "?")),
+                str(t.get("height", "?")),
+                format_bytes(t.get("size", 0)),
+                t.get("thumbnail_type", "?"),
+            )
+        print_table(table)
+
+    output(data, _human)
+
+
+@files.command()
+@click.argument("filename")
+@click.pass_context
+def scan(ctx: click.Context, filename: str) -> None:
+    """Trigger metadata rescan for a file."""
+    try:
+        client = get_client(ctx)
+        result = client.files_metascan(filename)
+    except Exception as e:
+        _handle_error(ctx, e)
+
+    if is_json_mode():
+        output_json(result)
+    else:
+        console.print(f"Metadata scan initiated: {filename}")
