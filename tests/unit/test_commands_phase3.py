@@ -251,14 +251,26 @@ class TestPowerList:
 
 
 class TestPowerOnOff:
-    def test_on(self) -> None:
+    def test_on_with_yes(self) -> None:
         mock = _mock_client()
-        result = _invoke(["power", "on", "printer_power"], mock)
+        result = _invoke(["power", "on", "printer_power", "--yes"], mock)
         assert result.exit_code == 0
         mock.power_device_set.assert_called_once_with("printer_power", "on")
 
-    def test_off(self) -> None:
+    def test_off_with_yes(self) -> None:
         mock = _mock_client()
-        result = _invoke(["power", "off", "printer_power"], mock)
+        result = _invoke(["power", "off", "printer_power", "--yes"], mock)
         assert result.exit_code == 0
         mock.power_device_set.assert_called_once_with("printer_power", "off")
+
+    def test_on_requires_confirmation(self) -> None:
+        mock = _mock_client()
+        result = _invoke(["power", "on", "printer_power"], mock)
+        assert result.exit_code != 0
+        mock.power_device_set.assert_not_called()
+
+    def test_off_requires_confirmation(self) -> None:
+        mock = _mock_client()
+        result = _invoke(["power", "off", "printer_power"], mock)
+        assert result.exit_code != 0
+        mock.power_device_set.assert_not_called()

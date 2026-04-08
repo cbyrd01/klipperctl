@@ -95,6 +95,14 @@ class TestFilesDownload:
         data = json.loads(result.output)
         assert data["filename"] == "test.gcode"
 
+    def test_rejects_path_traversal_in_filename(self) -> None:
+        result = _invoke(["files", "download", "../../../etc/passwd"])
+        assert result.exit_code != 0
+
+    def test_rejects_output_path_traversal(self) -> None:
+        result = _invoke(["files", "download", "test.gcode", "--output", "../../../evil.gcode"])
+        assert result.exit_code != 0
+
 
 class TestFilesDelete:
     def test_with_yes(self) -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 
 from klipperctl.config import (
@@ -40,6 +42,17 @@ class TestSaveConfig:
         content = config_file.read_text()
         assert 'default_printer = "test"' in content
         assert "timeout = 30" in content
+
+    def test_sets_restrictive_permissions(self, tmp_path: Path, monkeypatch: object) -> None:
+        import klipperctl.config as cfg
+
+        config_file = tmp_path / "secdir" / "config.toml"
+        monkeypatch.setattr(cfg, "_config_path", lambda: config_file)  # type: ignore[attr-defined]
+        save_config({"default_printer": "test"})
+        file_mode = stat.S_IMODE(os.stat(config_file).st_mode)
+        dir_mode = stat.S_IMODE(os.stat(config_file.parent).st_mode)
+        assert file_mode == 0o600, f"Expected 0o600, got {oct(file_mode)}"
+        assert dir_mode == 0o700, f"Expected 0o700, got {oct(dir_mode)}"
 
     def test_roundtrip(self, tmp_path: Path, monkeypatch: object) -> None:
         import klipperctl.config as cfg

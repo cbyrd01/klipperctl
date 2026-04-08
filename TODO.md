@@ -7,11 +7,11 @@
 - [x] 1-tests. Run tests in both repos and commit
 
 ## Phase 2: Security Hardening
-- [ ] 2a. Config file permissions (chmod 0o600)
-- [ ] 2b. Path traversal validation on file operations
-- [ ] 2c. Add confirmation to `power on` / `power off`
-- [ ] 2d. Safer JSON serialization
-- [ ] 2-tests. Run tests in both repos and commit
+- [x] 2a. Config file permissions (chmod 0o600)
+- [x] 2b. Path traversal validation on file operations
+- [x] 2c. Add confirmation to `power on` / `power off`
+- [x] 2d. Safer JSON serialization
+- [x] 2-tests. Run tests in both repos and commit
 
 ## Phase 3: Error Handling Improvements
 - [ ] 3a. moonraker-client: Narrow exception catches in helpers.py

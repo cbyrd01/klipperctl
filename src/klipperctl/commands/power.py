@@ -84,9 +84,12 @@ def status(ctx: click.Context, device: str | None, show_all: bool) -> None:
 
 @power.command()
 @click.argument("device")
+@click.option("--yes", is_flag=True, help="Skip confirmation.")
 @click.pass_context
-def on(ctx: click.Context, device: str) -> None:
+def on(ctx: click.Context, device: str, yes: bool) -> None:
     """Turn on a power device."""
+    if not yes:
+        click.confirm(f"Turn on device '{device}'?", abort=True)
     try:
         client = get_client(ctx)
         result = client.power_device_set(device, "on")
@@ -101,9 +104,12 @@ def on(ctx: click.Context, device: str) -> None:
 
 @power.command()
 @click.argument("device")
+@click.option("--yes", is_flag=True, help="Skip confirmation.")
 @click.pass_context
-def off(ctx: click.Context, device: str) -> None:
+def off(ctx: click.Context, device: str, yes: bool) -> None:
     """Turn off a power device."""
+    if not yes:
+        click.confirm(f"Turn off device '{device}'?", abort=True)
     try:
         client = get_client(ctx)
         result = client.power_device_set(device, "off")

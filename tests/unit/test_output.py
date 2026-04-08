@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
+
 from klipperctl.output import (
+    _json_default,
     format_bytes,
     format_duration,
     format_percent,
@@ -84,3 +91,30 @@ class TestFormatTimestamp:
         result = format_timestamp(1700000000.0)
         assert isinstance(result, str)
         assert "2023" in result
+
+
+class TestJsonDefault:
+    def test_datetime_serializes_to_iso(self) -> None:
+        dt = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        result = _json_default(dt)
+        assert result == "2024-01-15T12:00:00+00:00"
+
+    def test_path_serializes_to_string(self) -> None:
+        p = Path("/tmp/test.gcode")
+        result = _json_default(p)
+        assert result == "/tmp/test.gcode"
+
+    def test_set_serializes_to_list(self) -> None:
+        result = _json_default({1, 2, 3})
+        assert sorted(result) == [1, 2, 3]
+
+    def test_unknown_type_raises(self) -> None:
+        with pytest.raises(TypeError, match="not JSON serializable"):
+            _json_default(object())
+
+    def test_full_json_dumps(self) -> None:
+        data = {"time": datetime(2024, 1, 1, tzinfo=timezone.utc), "path": Path("/x")}
+        result = json.dumps(data, default=_json_default)
+        parsed = json.loads(result)
+        assert parsed["time"] == "2024-01-01T00:00:00+00:00"
+        assert parsed["path"] == "/x"

@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 from moonraker_client.helpers import list_gcode_files, upload_gcode
+
+
+def _validate_remote_path(name: str) -> str:
+    """Reject remote filenames that contain path traversal sequences."""
+    if ".." in name:
+        raise click.BadParameter(f"Invalid remote path (contains '..'): {name}")
+    return name
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -140,6 +149,7 @@ def upload(ctx: click.Context, file: str, remote_path: str | None, start_print: 
 @click.pass_context
 def download(ctx: click.Context, filename: str, output_path: str | None, root: str) -> None:
     """Download a file from the printer."""
+    _validate_remote_path(filename)
     try:
         client = get_client(ctx)
         data = client.files_download(root, filename)
@@ -147,8 +157,16 @@ def download(ctx: click.Context, filename: str, output_path: str | None, root: s
         _handle_error(ctx, e)
 
     if output_path:
-        with open(output_path, "wb" if isinstance(data, bytes) else "w") as f:
-            f.write(data)
+        # Reject path traversal sequences in the output path
+        if ".." in Path(output_path).parts:
+            raise click.BadParameter(
+                f"Output path must not contain '..': {output_path}"
+            )
+        try:
+            with open(output_path, "wb" if isinstance(data, bytes) else "w") as f:
+                f.write(data)
+        except OSError as e:
+            raise click.ClickException(f"Failed to write file: {e}") from e
         if not is_json_mode():
             console.print(f"Downloaded to: {output_path}")
         else:

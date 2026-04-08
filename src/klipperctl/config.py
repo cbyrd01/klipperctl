@@ -35,11 +35,16 @@ def load_config() -> dict[str, Any]:
 
 
 def save_config(config: dict[str, Any]) -> None:
-    """Save configuration to disk in TOML format."""
+    """Save configuration to disk in TOML format.
+
+    Sets restrictive permissions (0o600) since config may contain API keys.
+    """
     path = _config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
     with open(path, "w") as f:
         _write_toml(f, config)
+    os.chmod(path, 0o600)
 
 
 def _write_toml(f: Any, data: dict[str, Any], prefix: str = "") -> None:

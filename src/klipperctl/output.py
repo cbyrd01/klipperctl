@@ -75,9 +75,24 @@ def format_percent(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+def _json_default(obj: object) -> str:
+    """Safely serialize non-standard types to JSON.
+
+    Handles known types explicitly and rejects unknown objects to prevent
+    accidental leakage of internal state.
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, (set, frozenset)):
+        return list(obj)  # type: ignore[return-value]
+    if hasattr(obj, "__fspath__"):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 def output_json(data: Any) -> None:
     """Print data as JSON to stdout."""
-    click.echo(json.dumps(data, default=str))
+    click.echo(json.dumps(data, default=_json_default))
 
 
 def output_error(message: str, code: int = 1) -> None:
