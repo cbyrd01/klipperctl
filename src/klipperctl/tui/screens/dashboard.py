@@ -21,6 +21,7 @@ class DashboardScreen(Screen):
         ("c", "app.push_screen('console')", "Console"),
         ("m", "app.push_screen('commands')", "Commands"),
         ("r", "refresh_data", "Refresh"),
+        ("escape", "app.quit", "Quit"),
         ("q", "app.quit", "Quit"),
     ]
 

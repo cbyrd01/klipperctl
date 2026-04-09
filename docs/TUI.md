@@ -92,9 +92,18 @@ Nested menu system providing access to all CLI functionality:
 **How it works:**
 1. Select a command group from the top-level menu
 2. Select a specific command from the group's submenu
-3. For commands requiring input, a form dialog appears with fields for arguments
-4. Destructive commands (delete, cancel, emergency-stop, shutdown, etc.) show a confirmation dialog
-5. Results are displayed in a modal dialog
+3. **Smart selection lists**: Commands that accept filenames, device names, services, etc. fetch the available options from the printer API and present a selection list instead of requiring manual text entry
+4. For commands requiring freeform input (GCode, temperatures, paths), a form dialog appears
+5. Destructive commands (delete, cancel, emergency-stop, shutdown, etc.) show a confirmation dialog
+6. Results are displayed in a modal dialog
+
+**Selection lists are used for:**
+- Print start, file info/download/delete/thumbnails/scan (fetches file list from printer)
+- Queue add/jump/remove (fetches queued jobs)
+- System service restart/stop/start (fetches system services)
+- Update upgrade/rollback/recover (fetches updatable components)
+- Power on/off (fetches power device list)
+- Config remove-printer/use (reads local printer profiles)
 
 ## Keyboard Shortcuts
 
@@ -105,7 +114,7 @@ Nested menu system providing access to all CLI functionality:
 | `m` | Switch to Commands menu |
 | `r` | Refresh data (on Dashboard) |
 | `q` | Quit the TUI |
-| `Escape` | Go back / close modal |
+| `Escape` | Quit (on Dashboard) / Go back (elsewhere) |
 | `Enter` | Select menu item / submit form |
 
 ## Connection

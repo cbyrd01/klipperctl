@@ -87,6 +87,7 @@ mypy src/klipperctl/
 - **Path validation**: File download operations validate remote filenames and output paths against path traversal.
 - **TUI architecture**: The TUI is an optional Textual app (`pip install klipperctl[tui]`). It polls printer data via sync `MoonrakerClient` in background workers (`run_worker` with `asyncio.to_thread`). Command execution uses Click's `CliRunner` internally to reuse all existing command logic. Screens use Textual's reactive attributes for auto-refresh.
 - **TUI command menus**: All 11 CLI command groups are mirrored as `_BaseCommandScreen` subclasses in `screens/commands.py`. Each screen maps list item selections to CLI args. Destructive commands use `ConfirmModal`, commands with args use `InputFormScreen`.
+- **TUI selection lists**: Commands that accept filenames, device names, services, etc. use `_select_and_execute()` to fetch options from the API via `app.fetch_api_list()` and present a `SelectionScreen` modal. Fetch functions (`_fetch_file_list`, `_fetch_power_devices`, etc.) are defined at module level. For destructive selection commands, use `_select_then_confirm()` which chains selection → confirmation → execution.
 
 ### Dependencies
 

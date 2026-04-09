@@ -257,6 +257,129 @@ class _BaseCommandScreen(Screen):
         """Push an input form screen for commands that need arguments."""
         self.app.push_screen(InputFormScreen(title=title, fields=fields, callback=build_args))
 
+    def _select_and_execute(
+        self,
+        title: str,
+        fetch_fn: Any,
+        build_args: Any,
+    ) -> None:
+        """Fetch options from API, show selection list, then execute command."""
+        from klipperctl.tui.app import KlipperApp
+
+        app = self.app
+        if not isinstance(app, KlipperApp):
+            return
+
+        def _on_items(items: list[tuple[str, str]]) -> None:
+            def _on_selected(value: str) -> None:
+                if not value:
+                    return
+                args = build_args(value)
+                if args is not None:
+                    app.run_cli_command(args, title)
+
+            app.push_screen(SelectionScreen(title=title, items=items), _on_selected)
+
+        app.fetch_api_list(fetch_fn, _on_items)
+
+    def _select_then_confirm(
+        self,
+        title: str,
+        fetch_fn: Any,
+        confirm_msg: Any,
+        build_args: Any,
+    ) -> None:
+        """Fetch options, show selection, confirm, then execute."""
+        from klipperctl.tui.app import KlipperApp
+
+        app = self.app
+        if not isinstance(app, KlipperApp):
+            return
+
+        def _on_items(items: list[tuple[str, str]]) -> None:
+            def _on_selected(value: str) -> None:
+                if not value:
+                    return
+                msg = confirm_msg(value) if callable(confirm_msg) else confirm_msg
+
+                def _on_confirm(confirmed: bool) -> None:
+                    if confirmed:
+                        args = build_args(value)
+                        if args is not None:
+                            app.run_cli_command(args, title)
+
+                app.push_screen(ConfirmModal(msg), _on_confirm)
+
+            app.push_screen(SelectionScreen(title=title, items=items), _on_selected)
+
+        app.fetch_api_list(fetch_fn, _on_items)
+
+
+# --- Selection Screen ---
+
+
+class SelectionScreen(ModalScreen[str]):
+    """Modal screen for selecting from a list of options."""
+
+    DEFAULT_CSS = """
+    SelectionScreen {
+        align: center middle;
+    }
+    #selection-dialog {
+        width: 70%;
+        height: 70%;
+        padding: 1 2;
+        border: solid $primary;
+        background: $surface;
+    }
+    #selection-dialog Static {
+        margin-bottom: 1;
+    }
+    #selection-list {
+        height: 1fr;
+    }
+    #selection-list ListItem {
+        padding: 0 2;
+    }
+    #selection-list ListItem Label {
+        width: 100%;
+    }
+    """
+
+    def __init__(
+        self,
+        title: str,
+        items: list[tuple[str, str]],
+        **kwargs: object,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._title = title
+        self._items = items  # (value, display_label)
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="selection-dialog"):
+            yield Static(f"[bold]{self._title}[/bold]")
+            yield ListView(
+                *[
+                    ListItem(Label(display), id=f"sel-{i}")
+                    for i, (_value, display) in enumerate(self._items)
+                ],
+                id="selection-list",
+            )
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        item_id = event.item.id or ""
+        idx_str = item_id.removeprefix("sel-")
+        try:
+            idx = int(idx_str)
+            value = self._items[idx][0]
+            self.dismiss(value)
+        except (ValueError, IndexError):
+            pass
+
+    def key_escape(self) -> None:
+        self.dismiss("")
+
 
 # --- Input Form Screen ---
 
@@ -341,6 +464,70 @@ class InputFormScreen(ModalScreen):
                 app = self.app
                 if isinstance(app, KlipperApp):
                     app.run_cli_command(args, self._title)
+
+
+# --- API Fetch Functions for Selection Lists ---
+
+
+def _fetch_file_list(client: Any) -> list[tuple[str, str]]:
+    """Fetch gcode files from the printer."""
+    files = client.files_list()
+    files = sorted(files, key=lambda f: f.get("modified", 0), reverse=True)
+    return [(f["path"], f["path"]) for f in files]
+
+
+def _fetch_power_devices(client: Any) -> list[tuple[str, str]]:
+    """Fetch power device names."""
+    from klipperctl.output import unwrap_result
+
+    raw = client.power_devices_list()
+    devices = unwrap_result(raw, "devices")
+    if isinstance(devices, list):
+        return [(d["device"], d["device"]) for d in devices if "device" in d]
+    return []
+
+
+def _fetch_services(client: Any) -> list[tuple[str, str]]:
+    """Fetch system service names."""
+    data = client.machine_systeminfo()
+    sys_info = data.get("system_info", data)
+    services = sys_info.get("service_state", {})
+    return [
+        (name, f"{name}  [dim]({info.get('active_state', '?')})[/dim]")
+        for name, info in sorted(services.items())
+    ]
+
+
+def _fetch_update_components(client: Any) -> list[tuple[str, str]]:
+    """Fetch updatable component names."""
+    data = client.machine_update_status()
+    version_info = data.get("version_info", {})
+    return [
+        (name, f"{name}  [dim]({info.get('version', '?')})[/dim]")
+        for name, info in sorted(version_info.items())
+    ]
+
+
+def _fetch_queue_jobs(client: Any) -> list[tuple[str, str]]:
+    """Fetch queued job IDs."""
+    data = client.server_jobqueue_status()
+    jobs = data.get("queued_jobs", [])
+    return [(j["job_id"], f"{j['job_id']}  [dim]({j.get('filename', '?')})[/dim]") for j in jobs]
+
+
+def _fetch_printer_profiles() -> list[tuple[str, str]]:
+    """Fetch configured printer profile names (local config, no client needed)."""
+    from klipperctl.config import load_config
+
+    config = load_config()
+    printers = config.get("printers", {})
+    default = config.get("default_printer", "")
+    items = []
+    for name in sorted(printers):
+        url = printers[name].get("url", "")
+        marker = " [green](default)[/green]" if name == default else ""
+        items.append((name, f"{name}  [dim]{url}[/dim]{marker}"))
+    return items
 
 
 # --- Individual Command Group Screens ---
@@ -432,10 +619,10 @@ class PrintCommandScreen(_BaseCommandScreen):
 
     def _run_command(self, cmd_name: str) -> None:
         if cmd_name == "start":
-            self._prompt_and_execute(
-                "Start Print",
-                [("Filename", "e.g. benchy.gcode", True)],
-                lambda v: ["print", "start", v["Filename"]],
+            self._select_and_execute(
+                "Start Print — Select File",
+                _fetch_file_list,
+                lambda v: ["print", "start", v],
             )
         elif cmd_name == "pause":
             self._execute_cli(["print", "pause"], "Pause Print")
@@ -474,10 +661,10 @@ class FilesCommandScreen(_BaseCommandScreen):
         if cmd_name == "list":
             self._execute_cli(["files", "list"], "File List")
         elif cmd_name == "info":
-            self._prompt_and_execute(
-                "File Info",
-                [("Filename", "e.g. benchy.gcode", True)],
-                lambda v: ["files", "info", v["Filename"]],
+            self._select_and_execute(
+                "File Info — Select File",
+                _fetch_file_list,
+                lambda v: ["files", "info", v],
             )
         elif cmd_name == "upload":
             self._prompt_and_execute(
@@ -491,32 +678,17 @@ class FilesCommandScreen(_BaseCommandScreen):
                 ),
             )
         elif cmd_name == "download":
-            self._prompt_and_execute(
-                "Download File",
-                [
-                    ("Filename", "Remote filename", True),
-                    ("Output", "Local output path (optional)", False),
-                ],
-                lambda v: (
-                    ["files", "download", v["Filename"]]
-                    + (["--output", v["Output"]] if v["Output"] else [])
-                ),
+            self._select_and_execute(
+                "Download File — Select File",
+                _fetch_file_list,
+                lambda v: ["files", "download", v],
             )
         elif cmd_name == "delete":
-
-            def _prompt_delete() -> None:
-                self._prompt_and_execute(
-                    "Delete File",
-                    [("Filename", "File to delete", True)],
-                    lambda v: ["files", "delete", v["Filename"], "--yes"],
-                )
-
-            def _on_confirm(confirmed: bool) -> None:
-                if confirmed:
-                    _prompt_delete()
-
-            self.app.push_screen(
-                ConfirmModal("Are you sure you want to delete a file?"), _on_confirm
+            self._select_then_confirm(
+                "Delete File — Select File",
+                _fetch_file_list,
+                lambda v: f"Delete '{v}'?",
+                lambda v: ["files", "delete", v, "--yes"],
             )
         elif cmd_name == "move":
             self._prompt_and_execute(
@@ -554,16 +726,16 @@ class FilesCommandScreen(_BaseCommandScreen):
                 _on_confirm_rmdir,
             )
         elif cmd_name == "thumbnails":
-            self._prompt_and_execute(
-                "Thumbnails",
-                [("Filename", "GCode file", True)],
-                lambda v: ["files", "thumbnails", v["Filename"]],
+            self._select_and_execute(
+                "Thumbnails — Select File",
+                _fetch_file_list,
+                lambda v: ["files", "thumbnails", v],
             )
         elif cmd_name == "scan":
-            self._prompt_and_execute(
-                "Scan Metadata",
-                [("Filename", "File to rescan", True)],
-                lambda v: ["files", "scan", v["Filename"]],
+            self._select_and_execute(
+                "Scan Metadata — Select File",
+                _fetch_file_list,
+                lambda v: ["files", "scan", v],
             )
 
 
@@ -614,26 +786,26 @@ class QueueCommandScreen(_BaseCommandScreen):
         if cmd_name == "status":
             self._execute_cli(["queue", "status"], "Queue Status")
         elif cmd_name == "add":
-            self._prompt_and_execute(
-                "Add to Queue",
-                [("Files", "Space-separated filenames", True)],
-                lambda v: ["queue", "add", *v["Files"].split()],
+            self._select_and_execute(
+                "Add to Queue — Select File",
+                _fetch_file_list,
+                lambda v: ["queue", "add", v],
             )
         elif cmd_name == "start":
             self._execute_cli(["queue", "start"], "Start Queue")
         elif cmd_name == "pause":
             self._execute_cli(["queue", "pause"], "Pause Queue")
         elif cmd_name == "jump":
-            self._prompt_and_execute(
-                "Jump Job",
-                [("Job ID", "Job ID to move to front", True)],
-                lambda v: ["queue", "jump", v["Job ID"]],
+            self._select_and_execute(
+                "Jump Job — Select Job",
+                _fetch_queue_jobs,
+                lambda v: ["queue", "jump", v],
             )
         elif cmd_name == "remove":
-            self._prompt_and_execute(
-                "Remove Job",
-                [("Job IDs", "Space-separated job IDs", True)],
-                lambda v: ["queue", "remove", *v["Job IDs"].split()],
+            self._select_and_execute(
+                "Remove Job — Select Job",
+                _fetch_queue_jobs,
+                lambda v: ["queue", "remove", v],
             )
 
 
@@ -693,10 +865,10 @@ class SystemCommandScreen(_BaseCommandScreen):
             self._execute_cli(simple[cmd_name], cmd_name.title())
         elif cmd_name.startswith("service-"):
             action = cmd_name.split("-", 1)[1]
-            self._prompt_and_execute(
-                f"Service {action.title()}",
-                [("Service", "Service name", True)],
-                lambda v, a=action: ["system", "service", a, v["Service"]],
+            self._select_and_execute(
+                f"Service {action.title()} — Select Service",
+                _fetch_services,
+                lambda v, a=action: ["system", "service", a, v],
             )
         elif cmd_name in ("shutdown", "reboot"):
 
@@ -723,22 +895,22 @@ class UpdateCommandScreen(_BaseCommandScreen):
         if cmd_name == "status":
             self._execute_cli(["update", "status"], "Update Status")
         elif cmd_name == "upgrade":
-            self._prompt_and_execute(
-                "Upgrade",
-                [("Name", "Component name (blank for all)", False)],
-                lambda v: ["update", "upgrade"] + (["--name", v["Name"]] if v["Name"] else []),
+            self._select_and_execute(
+                "Upgrade — Select Component",
+                _fetch_update_components,
+                lambda v: ["update", "upgrade", "--name", v],
             )
         elif cmd_name == "rollback":
-            self._prompt_and_execute(
-                "Rollback",
-                [("Name", "Component name", True)],
-                lambda v: ["update", "rollback", v["Name"]],
+            self._select_and_execute(
+                "Rollback — Select Component",
+                _fetch_update_components,
+                lambda v: ["update", "rollback", v],
             )
         elif cmd_name == "recover":
-            self._prompt_and_execute(
-                "Recover",
-                [("Name", "Component name", True)],
-                lambda v: ["update", "recover", v["Name"]],
+            self._select_and_execute(
+                "Recover — Select Component",
+                _fetch_update_components,
+                lambda v: ["update", "recover", v],
             )
 
 
@@ -757,21 +929,11 @@ class PowerCommandScreen(_BaseCommandScreen):
         elif cmd_name == "status":
             self._execute_cli(["power", "status", "--all"], "Power Status")
         elif cmd_name in ("on", "off"):
-
-            def _prompt_power(action: str = cmd_name) -> None:
-                self._prompt_and_execute(
-                    f"Power {action.upper()}",
-                    [("Device", "Device name", True)],
-                    lambda v, a=action: ["power", a, v["Device"], "--yes"],
-                )
-
-            def _on_confirm(confirmed: bool) -> None:
-                if confirmed:
-                    _prompt_power()
-
-            self.app.push_screen(
-                ConfirmModal(f"Are you sure you want to turn {cmd_name} a power device?"),
-                _on_confirm,
+            self._select_then_confirm(
+                f"Power {cmd_name.upper()} — Select Device",
+                _fetch_power_devices,
+                lambda v, a=cmd_name: f"Turn {a} '{v}'?",
+                lambda v, a=cmd_name: ["power", a, v, "--yes"],
             )
 
 
@@ -847,14 +1009,30 @@ class ConfigCommandScreen(_BaseCommandScreen):
                 ),
             )
         elif cmd_name == "remove-printer":
-            self._prompt_and_execute(
-                "Remove Printer",
-                [("Name", "Printer name to remove", True)],
-                lambda v: ["config", "remove-printer", v["Name"]],
-            )
+            profiles = _fetch_printer_profiles()
+            if profiles:
+
+                def _on_selected(value: str) -> None:
+                    if value:
+                        self._execute_cli(["config", "remove-printer", value], "Remove Printer")
+
+                self.app.push_screen(
+                    SelectionScreen(title="Remove Printer — Select Profile", items=profiles),
+                    _on_selected,
+                )
+            else:
+                self.app.notify("No printer profiles configured", severity="warning")
         elif cmd_name == "use":
-            self._prompt_and_execute(
-                "Switch Printer",
-                [("Name", "Printer name to activate", True)],
-                lambda v: ["config", "use", v["Name"]],
-            )
+            profiles = _fetch_printer_profiles()
+            if profiles:
+
+                def _on_selected(value: str) -> None:
+                    if value:
+                        self._execute_cli(["config", "use", value], "Switch Printer")
+
+                self.app.push_screen(
+                    SelectionScreen(title="Switch Printer — Select Profile", items=profiles),
+                    _on_selected,
+                )
+            else:
+                self.app.notify("No printer profiles configured", severity="warning")

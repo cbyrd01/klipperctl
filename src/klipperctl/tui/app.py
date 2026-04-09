@@ -111,6 +111,21 @@ class KlipperApp(App):
             self._update_dashboard(data)
         elif event.worker.group == "cli_command":
             self._on_cli_result(event)
+        elif event.worker.group == "fetch_list":
+            self._on_fetch_list_result(event)
+
+    def _on_fetch_list_result(self, event: Worker.StateChanged) -> None:
+        result = event.worker.result
+        if result is None:
+            return
+        callback, items = result
+        if items and items[0][0] == "_error":
+            self.notify(f"Error: {items[0][1]}", severity="error")
+            return
+        if not items:
+            self.notify("No items found", severity="warning")
+            return
+        callback(items)
 
     def _update_dashboard(self, data: dict[str, Any]) -> None:
         """Push data to the dashboard screen."""
@@ -180,6 +195,30 @@ class KlipperApp(App):
             return title, output
 
         self.run_worker(_worker, group="cli_command")
+
+    def fetch_api_list(
+        self,
+        fetch_fn: Any,
+        callback: Any,
+    ) -> None:
+        """Fetch a list from the API in a worker, then call callback with results."""
+        import asyncio
+
+        def _fetch() -> list[tuple[str, str]]:
+            try:
+                client = self._build_sync_client()
+                try:
+                    return fetch_fn(client)
+                finally:
+                    client.close()
+            except Exception as exc:
+                return [("_error", str(exc))]
+
+        async def _worker() -> tuple[Any, list[tuple[str, str]]]:
+            items = await asyncio.to_thread(_fetch)
+            return callback, items
+
+        self.run_worker(_worker, group="fetch_list")
 
     def _on_cli_result(self, event: Worker.StateChanged) -> None:
         if event.state != WorkerState.SUCCESS:

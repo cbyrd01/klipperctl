@@ -330,3 +330,212 @@ class TestInputFormScreen:
                 from klipperctl.tui.screens.dashboard import DashboardScreen
 
                 assert isinstance(app.screen, DashboardScreen)
+
+
+class TestDashboardEscapeQuit:
+    @pytest.mark.asyncio
+    async def test_escape_binding_exists_on_dashboard(self) -> None:
+        from klipperctl.tui.screens.dashboard import DashboardScreen
+
+        bindings = [b[0] for b in DashboardScreen.BINDINGS]
+        assert "escape" in bindings
+
+    @pytest.mark.asyncio
+    async def test_escape_does_not_exist_on_command_screens(self) -> None:
+        """Escape on sub-screens should go back, not quit."""
+        from klipperctl.tui.screens.commands import CommandMenuScreen
+
+        bindings = {b[0]: b[1] for b in CommandMenuScreen.BINDINGS}
+        assert bindings.get("escape") == "app.pop_screen"
+
+
+class TestSelectionScreen:
+    @pytest.mark.asyncio
+    async def test_selection_screen_renders_items(self) -> None:
+        from klipperctl.tui.screens.commands import SelectionScreen
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                items = [
+                    ("file1.gcode", "file1.gcode"),
+                    ("file2.gcode", "file2.gcode"),
+                    ("file3.gcode", "file3.gcode"),
+                ]
+                app.push_screen(SelectionScreen(title="Select File", items=items))
+                await pilot.pause()
+                assert isinstance(app.screen, SelectionScreen)
+                from textual.widgets import ListView
+
+                lv = app.screen.query_one("#selection-list", ListView)
+                assert len(list(lv.children)) == 3
+
+    @pytest.mark.asyncio
+    async def test_selection_screen_dismiss_on_select(self) -> None:
+        from klipperctl.tui.screens.commands import SelectionScreen
+
+        results: list[str] = []
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                items = [("val1", "Option 1"), ("val2", "Option 2")]
+                app.push_screen(
+                    SelectionScreen(title="Test", items=items),
+                    lambda r: results.append(r),
+                )
+                await pilot.pause()
+                from textual.widgets import ListView
+
+                lv = app.screen.query_one("#selection-list", ListView)
+                lv.index = 0
+                await pilot.press("enter")
+                await pilot.pause()
+                assert results == ["val1"]
+
+    @pytest.mark.asyncio
+    async def test_selection_screen_escape_dismisses_empty(self) -> None:
+        from klipperctl.tui.screens.commands import SelectionScreen
+
+        results: list[str] = []
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                items = [("val1", "Option 1")]
+                app.push_screen(
+                    SelectionScreen(title="Test", items=items),
+                    lambda r: results.append(r),
+                )
+                await pilot.pause()
+                await pilot.press("escape")
+                await pilot.pause()
+                assert results == [""]
+
+
+class TestFetchFunctions:
+    def test_fetch_file_list(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_file_list
+
+        mock_client = MagicMock()
+        mock_client.files_list.return_value = [
+            {"path": "b.gcode", "modified": 100},
+            {"path": "a.gcode", "modified": 200},
+        ]
+        result = _fetch_file_list(mock_client)
+        assert result == [("a.gcode", "a.gcode"), ("b.gcode", "b.gcode")]
+
+    def test_fetch_power_devices(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_power_devices
+
+        mock_client = MagicMock()
+        mock_client.power_devices_list.return_value = {
+            "devices": [{"device": "printer"}, {"device": "lights"}]
+        }
+        result = _fetch_power_devices(mock_client)
+        assert result == [("printer", "printer"), ("lights", "lights")]
+
+    def test_fetch_services(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_services
+
+        mock_client = MagicMock()
+        mock_client.machine_systeminfo.return_value = {
+            "system_info": {
+                "service_state": {
+                    "klipper": {"active_state": "active"},
+                    "moonraker": {"active_state": "active"},
+                }
+            }
+        }
+        result = _fetch_services(mock_client)
+        assert len(result) == 2
+        assert result[0][0] == "klipper"
+        assert result[1][0] == "moonraker"
+
+    def test_fetch_update_components(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_update_components
+
+        mock_client = MagicMock()
+        mock_client.machine_update_status.return_value = {
+            "version_info": {
+                "klipper": {"version": "v0.12.0"},
+                "moonraker": {"version": "v0.8.0"},
+            }
+        }
+        result = _fetch_update_components(mock_client)
+        assert len(result) == 2
+        assert result[0][0] == "klipper"
+
+    def test_fetch_queue_jobs(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_queue_jobs
+
+        mock_client = MagicMock()
+        mock_client.server_jobqueue_status.return_value = {
+            "queued_jobs": [
+                {"job_id": "abc123", "filename": "test.gcode"},
+                {"job_id": "def456", "filename": "benchy.gcode"},
+            ]
+        }
+        result = _fetch_queue_jobs(mock_client)
+        assert len(result) == 2
+        assert result[0][0] == "abc123"
+        assert "test.gcode" in result[0][1]
+
+    def test_fetch_printer_profiles(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_printer_profiles
+
+        mock_config = {
+            "default_printer": "voron",
+            "printers": {
+                "voron": {"url": "http://voron:7125"},
+                "ender": {"url": "http://ender:7125"},
+            },
+        }
+        with patch("klipperctl.config.load_config", return_value=mock_config):
+            result = _fetch_printer_profiles()
+            assert len(result) == 2
+            assert result[0][0] == "ender"
+            assert result[1][0] == "voron"
+            assert "default" in result[1][1]
+
+    def test_fetch_printer_profiles_empty(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_printer_profiles
+
+        with patch("klipperctl.config.load_config", return_value={}):
+            result = _fetch_printer_profiles()
+            assert result == []
+
+
+class TestFetchApiListWorker:
+    @pytest.mark.asyncio
+    async def test_fetch_api_list_success(self) -> None:
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_client.files_list.return_value = [
+                {"path": "test.gcode", "modified": 100},
+            ]
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                from klipperctl.tui.screens.commands import _fetch_file_list
+
+                callback_results: list[object] = []
+                app.fetch_api_list(
+                    _fetch_file_list,
+                    lambda items: callback_results.append(items),
+                )
+                await pilot.pause(delay=1.0)
+                assert len(callback_results) == 1
+                assert callback_results[0] == [("test.gcode", "test.gcode")]

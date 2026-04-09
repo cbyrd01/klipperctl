@@ -200,9 +200,9 @@ klipperctl tui --printer myprinter      # use a named profile
 The TUI provides:
 - **Dashboard**: Real-time printer status, progress bar, temperature readings with sparkline trends
 - **Console**: Interactive GCode console for sending commands
-- **Command Menu**: Nested menus exposing all 11 command groups with input forms and confirmation dialogs
+- **Command Menu**: Nested menus exposing all 11 command groups with smart selection lists (files, devices, services, components), input forms, and confirmation dialogs
 
-Keyboard shortcuts: `d` Dashboard, `c` Console, `m` Commands, `r` Refresh, `q` Quit, `Escape` Back.
+Keyboard shortcuts: `d` Dashboard, `c` Console, `m` Commands, `r` Refresh, `q`/`Escape` Quit (dashboard), `Escape` Back (elsewhere).
 
 See [docs/TUI.md](docs/TUI.md) for the full TUI guide.
 
