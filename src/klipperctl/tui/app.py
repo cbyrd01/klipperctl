@@ -101,15 +101,16 @@ class KlipperApp(App):
         return await asyncio.to_thread(_fetch)
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        """Handle worker completion to update the dashboard."""
-        if event.worker.group != "poll":
-            return
+        """Handle worker completion."""
         if event.state != WorkerState.SUCCESS:
             return
-        data = event.worker.result
-        if data is None or "_error" in data:
-            return
-        self._update_dashboard(data)
+        if event.worker.group == "poll":
+            data = event.worker.result
+            if data is None or "_error" in data:
+                return
+            self._update_dashboard(data)
+        elif event.worker.group == "cli_command":
+            self._on_cli_result(event)
 
     def _update_dashboard(self, data: dict[str, Any]) -> None:
         """Push data to the dashboard screen."""
@@ -178,8 +179,7 @@ class KlipperApp(App):
             output = await asyncio.to_thread(_run)
             return title, output
 
-        worker = self.run_worker(_worker, group="cli_command")
-        worker.on_state_changed = lambda event: self._on_cli_result(event)
+        self.run_worker(_worker, group="cli_command")
 
     def _on_cli_result(self, event: Worker.StateChanged) -> None:
         if event.state != WorkerState.SUCCESS:

@@ -199,3 +199,20 @@ class TestKlipperAppMounted:
                 from klipperctl.tui.screens.dashboard import DashboardScreen
 
                 assert isinstance(app.screen, DashboardScreen)
+
+    @pytest.mark.asyncio
+    async def test_run_cli_command_shows_result_modal(self) -> None:
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                # Execute a CLI command that doesn't need a real server
+                app.run_cli_command(["--help"], title="Help")
+                # Wait for worker to complete and modal to appear
+                await pilot.pause(delay=1.0)
+                from klipperctl.tui.screens.commands import ResultModal
+
+                assert isinstance(app.screen, ResultModal)
