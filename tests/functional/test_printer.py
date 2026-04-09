@@ -115,16 +115,12 @@ class TestSetTemp:
             )
             assert result.exit_code == 0
             # Verify target was set via JSON temps
-            result = runner.invoke(
-                cli, ["--url", MOONRAKER_URL, "--json", "printer", "temps"]
-            )
+            result = runner.invoke(cli, ["--url", MOONRAKER_URL, "--json", "printer", "temps"])
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert data["extruder"]["target"] == pytest.approx(50.0, abs=0.1)
         finally:
-            runner.invoke(
-                cli, ["--url", MOONRAKER_URL, "printer", "set-temp", "--hotend", "0"]
-            )
+            runner.invoke(cli, ["--url", MOONRAKER_URL, "printer", "set-temp", "--hotend", "0"])
 
     def test_set_bed_and_verify(self) -> None:
         runner = CliRunner()
@@ -133,25 +129,19 @@ class TestSetTemp:
                 cli, ["--url", MOONRAKER_URL, "printer", "set-temp", "--bed", "40"]
             )
             assert result.exit_code == 0
-            result = runner.invoke(
-                cli, ["--url", MOONRAKER_URL, "--json", "printer", "temps"]
-            )
+            result = runner.invoke(cli, ["--url", MOONRAKER_URL, "--json", "printer", "temps"])
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert data["heater_bed"]["target"] == pytest.approx(40.0, abs=0.1)
         finally:
-            runner.invoke(
-                cli, ["--url", MOONRAKER_URL, "printer", "set-temp", "--bed", "0"]
-            )
+            runner.invoke(cli, ["--url", MOONRAKER_URL, "printer", "set-temp", "--bed", "0"])
 
     def test_cooldown(self) -> None:
         runner = CliRunner()
         runner.invoke(
             cli, ["--url", MOONRAKER_URL, "printer", "set-temp", "--hotend", "0", "--bed", "0"]
         )
-        result = runner.invoke(
-            cli, ["--url", MOONRAKER_URL, "--json", "printer", "temps"]
-        )
+        result = runner.invoke(cli, ["--url", MOONRAKER_URL, "--json", "printer", "temps"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["extruder"]["target"] == pytest.approx(0.0, abs=0.1)

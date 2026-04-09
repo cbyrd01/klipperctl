@@ -11,11 +11,18 @@ Command line interface for 3D printers using [Moonraker](https://moonraker.readt
 - Live monitoring with `--watch` for temperatures and print progress
 - Automatic unit conversions (duration, file sizes, temperatures)
 - Stdin support for GCode piping
+- Interactive TUI dashboard with real-time monitoring (optional)
 
 ## Installation
 
 ```bash
 pip install klipperctl
+```
+
+With TUI support (interactive terminal dashboard):
+
+```bash
+pip install klipperctl[tui]
 ```
 
 For development:
@@ -24,7 +31,7 @@ For development:
 git clone https://github.com/cbyrd01/klipperctl.git
 cd klipperctl
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,tui]"
 pip install -e "../moonraker-client"  # sibling library dependency
 ```
 
@@ -179,6 +186,25 @@ klipperctl config use ender               # switch active printer
 klipperctl config remove-printer old
 klipperctl config set key value
 ```
+
+## Interactive TUI
+
+klipperctl includes an optional interactive terminal dashboard built with [Textual](https://textual.textualize.io/):
+
+```bash
+klipperctl tui                          # launch dashboard
+klipperctl --url http://printer:7125 tui
+klipperctl tui --printer myprinter      # use a named profile
+```
+
+The TUI provides:
+- **Dashboard**: Real-time printer status, progress bar, temperature readings with sparkline trends
+- **Console**: Interactive GCode console for sending commands
+- **Command Menu**: Nested menus exposing all 11 command groups with input forms and confirmation dialogs
+
+Keyboard shortcuts: `d` Dashboard, `c` Console, `m` Commands, `r` Refresh, `q` Quit, `Escape` Back.
+
+See [docs/TUI.md](docs/TUI.md) for the full TUI guide.
 
 ## Pipeline & JSON Mode
 

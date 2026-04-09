@@ -38,6 +38,9 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
 ]
+tui = [
+    "textual>=1.0",
+]
 
 [project.scripts]
 klipperctl = "klipperctl.cli:cli"
@@ -66,6 +69,10 @@ line-length = 99
 [tool.ruff.lint]
 select = ["B", "C4", "E", "F", "I", "N", "RUF", "SIM", "UP", "W"]
 
+[tool.ruff.lint.per-file-ignores]
+# Textual framework uses mutable class attributes by convention (BINDINGS, SCREENS, etc.)
+"src/klipperctl/tui/**" = ["RUF012"]
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
@@ -75,3 +82,10 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "tomllib"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "klipperctl.tui.*"
+# Textual framework uses patterns (mutable class attrs, complex generic types)
+# that don't align well with strict mypy settings
+disallow_untyped_defs = false
+disable_error_code = ["arg-type", "assignment", "override", "no-any-return", "attr-defined", "var-annotated"]

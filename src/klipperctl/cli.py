@@ -34,6 +34,7 @@ COMMAND_GROUPS: dict[str, tuple[str, str]] = {
     "power": ("klipperctl.commands.power", "power"),
     "auth": ("klipperctl.commands.auth", "auth"),
     "config": ("klipperctl.commands.config_cmd", "config_cmd"),
+    "tui": ("klipperctl.commands.tui_cmd", "tui_cmd"),
 }
 
 

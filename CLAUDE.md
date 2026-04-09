@@ -59,6 +59,14 @@ mypy src/klipperctl/
   - `power.py` — Power device list/status/on/off
   - `auth.py` — Login/logout/whoami/api-key
   - `config_cmd.py` — Multi-printer profile management
+  - `tui_cmd.py` — TUI launch command (`klipperctl tui`)
+- `src/klipperctl/tui/` — Interactive TUI (optional, requires `textual`):
+  - `app.py` — Main `KlipperApp` (Textual App), polling workers, CLI command execution
+  - `screens/dashboard.py` — Real-time status + temperature dashboard
+  - `screens/console.py` — GCode console with WebSocket streaming
+  - `screens/commands.py` — Nested command menus for all 11 command groups, confirmation/input/result modals
+  - `widgets/status.py` — `PrinterStatusWidget` (state, progress bar, elapsed, ETA)
+  - `widgets/temperatures.py` — `TemperatureWidget` (heater readings + sparkline history)
 
 ### Key Patterns
 
@@ -77,17 +85,20 @@ mypy src/klipperctl/
 - **Destructive commands**: Require `--yes` flag or interactive confirmation (emergency-stop, cancel, delete, shutdown, reboot, reset-totals, power on/off).
 - **Config security**: Config files are written with 0o600 permissions (directory 0o700) since they may contain API keys.
 - **Path validation**: File download operations validate remote filenames and output paths against path traversal.
+- **TUI architecture**: The TUI is an optional Textual app (`pip install klipperctl[tui]`). It polls printer data via sync `MoonrakerClient` in background workers (`run_worker` with `asyncio.to_thread`). Command execution uses Click's `CliRunner` internally to reuse all existing command logic. Screens use Textual's reactive attributes for auto-refresh.
+- **TUI command menus**: All 11 CLI command groups are mirrored as `_BaseCommandScreen` subclasses in `screens/commands.py`. Each screen maps list item selections to CLI args. Destructive commands use `ConfirmModal`, commands with args use `InputFormScreen`.
 
 ### Dependencies
 
 - `click>=8.1` — CLI framework (zero transitive deps)
 - `rich>=13.0` — Tables, colored output
 - `moonraker-client>=0.1.0` — Moonraker API client library (httpx + websockets)
+- Optional TUI: `textual>=1.0` — Terminal UI framework (install with `pip install klipperctl[tui]`)
 - Dev: `pytest`, `pytest-asyncio`, `ruff`, `mypy`
 
 ### Test Structure
 
-- `tests/unit/` — Click CliRunner tests with mocked MoonrakerClient (141 tests)
+- `tests/unit/` — Click CliRunner tests with mocked MoonrakerClient and Textual app tests
   - `test_filtering.py` — Message filtering (regex, temp reports)
   - `test_output.py` — Unit conversion formatting
   - `test_config.py` — Config file read/write/roundtrip
@@ -96,8 +107,14 @@ mypy src/klipperctl/
   - `test_commands_phase2.py` — Files extended, history, queue
   - `test_commands_phase3.py` — Server, system, update, power
   - `test_commands_phase4.py` — Auth, config
-- `tests/functional/` — Tests against a live Moonraker server (32 tests)
+  - `test_tui_widgets.py` — TUI widget unit tests (friendly names, reactive values, history)
+  - `test_tui_app.py` — TUI app lifecycle, navigation, dashboard updates
+  - `test_tui_screens.py` — TUI screen rendering, modals, forms
+  - `test_tui_command_screens.py` — All 11 command group screens, navigation, set-temp args
+  - `test_tui_cmd.py` — `klipperctl tui` CLI entry point, connection resolution
+- `tests/functional/` — Tests against a live Moonraker server
   - Skipped without `MOONRAKER_URL` env var + `--functional` flag
   - `test_printer.py` — Core commands against live printer
   - `test_all_commands.py` — History, queue, server, system, files
-- Test pattern: mock `build_client` to inject a MagicMock for unit tests; use CliRunner for both unit and functional tests
+  - `test_tui.py` — TUI dashboard, navigation, command execution against live server
+- Test pattern: mock `build_client` to inject a MagicMock for unit tests; use CliRunner for both unit and functional tests. TUI tests use Textual's `app.run_test()` with `pilot` for headless interaction.
