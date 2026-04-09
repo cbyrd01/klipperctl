@@ -36,7 +36,7 @@ class ConsoleScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical():
-            yield RichLog(highlight=True, markup=True, id="console-log")
+            yield RichLog(highlight=True, markup=False, id="console-log")
             yield Input(placeholder="Enter GCode command...", id="gcode-input")
         yield Footer()
 

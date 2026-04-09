@@ -136,7 +136,7 @@ class ConfirmModal(ModalScreen[bool]):
         from textual.containers import Horizontal
 
         with Vertical(id="confirm-dialog"):
-            yield Label(self._message)
+            yield Label(self._message, markup=False)
             with Horizontal(id="confirm-buttons"):
                 yield Button("Confirm", variant="error", id="confirm-yes")
                 yield Button("Cancel", variant="primary", id="confirm-no")
@@ -180,7 +180,7 @@ class ResultModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="result-dialog"):
             yield Static(f"[bold]{self._title}[/bold]")
-            yield Static(self._content, id="result-content")
+            yield Static(self._content, markup=False, id="result-content")
             yield Button("Close", variant="primary", id="result-close")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -469,11 +469,18 @@ class InputFormScreen(ModalScreen):
 # --- API Fetch Functions for Selection Lists ---
 
 
+def _esc(text: str) -> str:
+    """Escape Rich markup characters in untrusted text."""
+    from rich.markup import escape
+
+    return escape(str(text))
+
+
 def _fetch_file_list(client: Any) -> list[tuple[str, str]]:
     """Fetch gcode files from the printer."""
     files = client.files_list()
     files = sorted(files, key=lambda f: f.get("modified", 0), reverse=True)
-    return [(f["path"], f["path"]) for f in files]
+    return [(f["path"], _esc(f["path"])) for f in files]
 
 
 def _fetch_power_devices(client: Any) -> list[tuple[str, str]]:
@@ -483,7 +490,7 @@ def _fetch_power_devices(client: Any) -> list[tuple[str, str]]:
     raw = client.power_devices_list()
     devices = unwrap_result(raw, "devices")
     if isinstance(devices, list):
-        return [(d["device"], d["device"]) for d in devices if "device" in d]
+        return [(d["device"], _esc(d["device"])) for d in devices if "device" in d]
     return []
 
 
@@ -493,7 +500,7 @@ def _fetch_services(client: Any) -> list[tuple[str, str]]:
     sys_info = data.get("system_info", data)
     services = sys_info.get("service_state", {})
     return [
-        (name, f"{name}  [dim]({info.get('active_state', '?')})[/dim]")
+        (name, f"{_esc(name)}  [dim]({_esc(str(info.get('active_state', '?')))})[/dim]")
         for name, info in sorted(services.items())
     ]
 
@@ -503,7 +510,7 @@ def _fetch_update_components(client: Any) -> list[tuple[str, str]]:
     data = client.machine_update_status()
     version_info = data.get("version_info", {})
     return [
-        (name, f"{name}  [dim]({info.get('version', '?')})[/dim]")
+        (name, f"{_esc(name)}  [dim]({_esc(str(info.get('version', '?')))})[/dim]")
         for name, info in sorted(version_info.items())
     ]
 
@@ -512,7 +519,10 @@ def _fetch_queue_jobs(client: Any) -> list[tuple[str, str]]:
     """Fetch queued job IDs."""
     data = client.server_jobqueue_status()
     jobs = data.get("queued_jobs", [])
-    return [(j["job_id"], f"{j['job_id']}  [dim]({j.get('filename', '?')})[/dim]") for j in jobs]
+    return [
+        (j["job_id"], f"{_esc(j['job_id'])}  [dim]({_esc(j.get('filename', '?'))})[/dim]")
+        for j in jobs
+    ]
 
 
 def _fetch_printer_profiles() -> list[tuple[str, str]]:
@@ -526,7 +536,7 @@ def _fetch_printer_profiles() -> list[tuple[str, str]]:
     for name in sorted(printers):
         url = printers[name].get("url", "")
         marker = " [green](default)[/green]" if name == default else ""
-        items.append((name, f"{name}  [dim]{url}[/dim]{marker}"))
+        items.append((name, f"{_esc(name)}  [dim]{_esc(url)}[/dim]{marker}"))
     return items
 
 

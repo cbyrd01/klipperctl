@@ -539,3 +539,106 @@ class TestFetchApiListWorker:
                 await pilot.pause(delay=1.0)
                 assert len(callback_results) == 1
                 assert callback_results[0] == [("test.gcode", "test.gcode")]
+
+
+class TestMarkupSafety:
+    """Verify that untrusted API data doesn't crash Rich markup parsing."""
+
+    def test_fetch_file_list_escapes_markup_tags(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_file_list
+
+        mock_client = MagicMock()
+        mock_client.files_list.return_value = [
+            {"path": "[error] - Unknown.gcode", "modified": 100},
+            {"path": "normal.gcode", "modified": 200},
+        ]
+        result = _fetch_file_list(mock_client)
+        # Values should be raw (for CLI args)
+        assert result[1][0] == "[error] - Unknown.gcode"
+        # Display should have the bracket escaped so Rich doesn't crash
+        assert "\\[error]" in result[1][1]
+
+    def test_fetch_services_escapes_brackets(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_services
+
+        mock_client = MagicMock()
+        mock_client.machine_systeminfo.return_value = {
+            "system_info": {
+                "service_state": {
+                    "klipper [v1]": {"active_state": "active [ok]"},
+                }
+            }
+        }
+        result = _fetch_services(mock_client)
+        assert result[0][0] == "klipper [v1]"
+        # Display should be escaped so Rich doesn't crash
+        assert "\\[" in result[0][1]
+
+    def test_fetch_queue_jobs_escapes_brackets(self) -> None:
+        from klipperctl.tui.screens.commands import _fetch_queue_jobs
+
+        mock_client = MagicMock()
+        mock_client.server_jobqueue_status.return_value = {
+            "queued_jobs": [
+                {"job_id": "abc", "filename": "[test] - Unknown.gcode"},
+            ]
+        }
+        result = _fetch_queue_jobs(mock_client)
+        assert result[0][0] == "abc"
+        assert "\\[" in result[0][1]
+
+    @pytest.mark.asyncio
+    async def test_result_modal_with_brackets_in_content(self) -> None:
+        """ResultModal should not crash on CLI output containing brackets."""
+        from klipperctl.tui.screens.commands import ResultModal
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                # This content would crash with markup=True
+                app.push_screen(ResultModal("Test", "Status: [error] - Unknown\nLine 2"))
+                await pilot.pause()
+                assert isinstance(app.screen, ResultModal)
+
+    @pytest.mark.asyncio
+    async def test_selection_screen_with_escaped_items(self) -> None:
+        """SelectionScreen should render items with escaped markup safely."""
+        from klipperctl.tui.screens.commands import SelectionScreen
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                items = [
+                    ("file.gcode", "\\[test] - Unknown.gcode"),
+                    ("other.gcode", "normal_file.gcode"),
+                ]
+                app.push_screen(SelectionScreen(title="Select", items=items))
+                await pilot.pause()
+                assert isinstance(app.screen, SelectionScreen)
+
+    @pytest.mark.asyncio
+    async def test_confirm_modal_with_brackets(self) -> None:
+        """ConfirmModal should not crash with brackets in message."""
+        from klipperctl.tui.screens.commands import ConfirmModal
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                app.push_screen(ConfirmModal("Delete '[test] - Unknown.gcode'?"))
+                await pilot.pause()
+                from textual.widgets import Button
+
+                buttons = app.screen.query(Button)
+                assert len(list(buttons)) == 2
