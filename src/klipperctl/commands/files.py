@@ -160,9 +160,7 @@ def download(ctx: click.Context, filename: str, output_path: str | None, root: s
     if output_path:
         # Reject path traversal sequences in the output path
         if ".." in Path(output_path).parts:
-            raise click.BadParameter(
-                f"Output path must not contain '..': {output_path}"
-            )
+            raise click.BadParameter(f"Output path must not contain '..': {output_path}")
         try:
             with open(output_path, "wb" if isinstance(data, bytes) else "w") as f:
                 f.write(data)

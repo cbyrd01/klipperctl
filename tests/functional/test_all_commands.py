@@ -72,6 +72,20 @@ class TestServerCommands:
         result = _run("server", "logs", "--count", "5")
         assert result.exit_code == 0
 
+    def test_logs_exclude_temps(self) -> None:
+        result = _run("server", "logs", "--count", "20", "--exclude-temps")
+        assert result.exit_code == 0
+
+    def test_logs_with_filter(self) -> None:
+        result = _run("server", "logs", "--count", "20", "--filter", ".*")
+        assert result.exit_code == 0
+
+    def test_console_help(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["server", "console", "--help"])
+        assert result.exit_code == 0
+        assert "Stream console messages" in result.output
+
     def test_announcements(self) -> None:
         result = _run("server", "announcements")
         assert result.exit_code == 0

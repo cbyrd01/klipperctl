@@ -43,7 +43,8 @@ mypy src/klipperctl/
 ### Package Layout
 
 - `src/klipperctl/cli.py` — Root click.Group with global options (--url, --json, --timeout), alias expansion, lazy command loading, and error handling
-- `src/klipperctl/client.py` — MoonrakerClient construction from flags/env/config (priority: flags > env > config > defaults)
+- `src/klipperctl/client.py` — MoonrakerClient construction from flags/env/config (priority: flags > env > config > defaults). Also provides `build_async_client()` for WebSocket commands.
+- `src/klipperctl/filtering.py` — Reusable message filtering: regex include/exclude patterns and temperature report hiding for console/log commands
 - `src/klipperctl/output.py` — Output formatting: JSON mode, Rich tables/console, unit conversions (duration, bytes, temp, percent, timestamp)
 - `src/klipperctl/config.py` — Config file management with TOML read/write. Platform-aware paths: Linux `~/.config/klipperctl/`, macOS `~/Library/Application Support/klipperctl/`, Windows `%APPDATA%/klipperctl/`
 - `src/klipperctl/commands/` — One module per command group (11 total):
@@ -52,7 +53,7 @@ mypy src/klipperctl/
   - `files.py` — File list/upload/download/delete/move/copy/mkdir/rmdir/thumbnails/scan
   - `history.py` — Print history list/show/totals
   - `queue.py` — Job queue status/add/start/pause/jump/remove
-  - `server.py` — Server info/config/restart/logs/announcements
+  - `server.py` — Server info/config/restart/logs (with --watch/--filter/--exclude/--exclude-temps)/console (WebSocket streaming)/announcements
   - `system.py` — System info/health/services/peripherals/shutdown/reboot
   - `update.py` — Update status/upgrade/rollback/recover
   - `power.py` — Power device list/status/on/off
@@ -70,7 +71,9 @@ mypy src/klipperctl/
 - **Commands use helpers**: Prefer `moonraker_client.helpers` functions (get_printer_status, get_temperatures, start_print, etc.) over raw API calls where available.
 - **Output pattern**: Each command calls `output(data, human_fn)` — in JSON mode it serializes `data`, otherwise it calls `human_fn` for Rich-formatted output.
 - **Response unwrapping**: Use `unwrap_result(result, key)` from output.py to extract nested API responses instead of inline isinstance/get patterns.
-- **Watch loops**: Use `watch_loop(fn, interval)` from output.py for `--watch` polling commands (temps, health, progress).
+- **Watch loops**: Use `watch_loop(fn, interval)` from output.py for `--watch` polling commands (temps, health, progress). For tail-follow patterns (e.g. `server logs --watch`), use custom append loops instead of `watch_loop` (which clears the screen).
+- **Async/WebSocket commands**: Use `build_async_client(ctx)` from client.py for commands needing WebSocket (e.g. `server console`). Bridge async into Click commands with `asyncio.run()`. Manage client lifecycle with `async with`.
+- **Message filtering**: Use `build_filter()` / `MessageFilter` from filtering.py for `--filter`, `--exclude`, `--exclude-temps` options on log/console commands.
 - **Destructive commands**: Require `--yes` flag or interactive confirmation (emergency-stop, cancel, delete, shutdown, reboot, reset-totals, power on/off).
 - **Config security**: Config files are written with 0o600 permissions (directory 0o700) since they may contain API keys.
 - **Path validation**: File download operations validate remote filenames and output paths against path traversal.
@@ -80,11 +83,12 @@ mypy src/klipperctl/
 - `click>=8.1` — CLI framework (zero transitive deps)
 - `rich>=13.0` — Tables, colored output
 - `moonraker-client>=0.1.0` — Moonraker API client library (httpx + websockets)
-- Dev: `pytest`, `ruff`, `mypy`
+- Dev: `pytest`, `pytest-asyncio`, `ruff`, `mypy`
 
 ### Test Structure
 
 - `tests/unit/` — Click CliRunner tests with mocked MoonrakerClient (141 tests)
+  - `test_filtering.py` — Message filtering (regex, temp reports)
   - `test_output.py` — Unit conversion formatting
   - `test_config.py` — Config file read/write/roundtrip
   - `test_cli.py` — Help output, alias expansion

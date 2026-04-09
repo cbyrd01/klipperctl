@@ -43,7 +43,6 @@ def status(ctx: click.Context) -> None:
             console.print()
             table = make_table("ID", "Filename", "Added")
             for job in jobs:
-
                 table.add_row(
                     job.get("job_id", "?")[:8],
                     job.get("filename", "?"),

@@ -153,6 +153,69 @@ class TestServerLogs:
         assert result.exit_code == 0
         assert "G28" in result.output
 
+    def test_filter_includes(self) -> None:
+        mock = _mock_client()
+        mock.server_gcodestore.return_value = {
+            "gcode_store": [
+                {"message": "echo: G28 command", "time": 1700000000.0},
+                {"message": "echo: M104 S200", "time": 1700000001.0},
+            ],
+        }
+        result = _invoke(["server", "logs", "--filter", "G28"], mock)
+        assert result.exit_code == 0
+        assert "G28" in result.output
+        assert "M104" not in result.output
+
+    def test_exclude_hides(self) -> None:
+        mock = _mock_client()
+        mock.server_gcodestore.return_value = {
+            "gcode_store": [
+                {"message": "echo: G28 command", "time": 1700000000.0},
+                {"message": "echo: error occurred", "time": 1700000001.0},
+            ],
+        }
+        result = _invoke(["server", "logs", "--exclude", "error"], mock)
+        assert result.exit_code == 0
+        assert "G28" in result.output
+        assert "error" not in result.output
+
+    def test_exclude_temps(self) -> None:
+        mock = _mock_client()
+        mock.server_gcodestore.return_value = {
+            "gcode_store": [
+                {"message": "echo: G28 command", "time": 1700000000.0},
+                {"message": "ok T:210.5 /210.0 B:60.1 /60.0", "time": 1700000001.0},
+            ],
+        }
+        result = _invoke(["server", "logs", "--exclude-temps"], mock)
+        assert result.exit_code == 0
+        assert "G28" in result.output
+        assert "210.5" not in result.output
+
+    def test_json_with_filter(self) -> None:
+        mock = _mock_client()
+        mock.server_gcodestore.return_value = {
+            "gcode_store": [
+                {"message": "echo: G28 command", "time": 1700000000.0},
+                {"message": "ok T:210.5 /210.0 B:60.1 /60.0", "time": 1700000001.0},
+            ],
+        }
+        result = _invoke(["--json", "server", "logs", "--exclude-temps"], mock)
+        data = json.loads(result.output)
+        assert len(data) == 1
+        assert "G28" in data[0]["message"]
+
+
+class TestServerConsole:
+    def test_help(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["server", "console", "--help"])
+        assert result.exit_code == 0
+        assert "Stream console messages" in result.output
+        assert "--filter" in result.output
+        assert "--exclude" in result.output
+        assert "--exclude-temps" in result.output
+
 
 class TestServerAnnouncements:
     def test_human(self) -> None:

@@ -1,6 +1,7 @@
 """Client construction for klipperctl.
 
-Builds a MoonrakerClient from CLI flags, environment variables, and config file.
+Builds a MoonrakerClient (sync) or AsyncMoonrakerClient (async/WebSocket)
+from CLI flags, environment variables, and config file.
 Priority: CLI flags > environment variables > config file > defaults.
 """
 
@@ -9,13 +10,13 @@ from __future__ import annotations
 import os
 
 import click
-from moonraker_client import MoonrakerClient
+from moonraker_client import AsyncMoonrakerClient, MoonrakerClient
 
 from klipperctl.config import get_printer_api_key, get_printer_url, load_config
 
 
-def build_client(ctx: click.Context) -> MoonrakerClient:
-    """Build a MoonrakerClient from the current Click context.
+def _resolve_connection_params(ctx: click.Context) -> tuple[str, str | None, float]:
+    """Extract URL, api_key, and timeout from the Click context.
 
     Resolution order for URL:
         1. --url flag
@@ -41,8 +42,22 @@ def build_client(ctx: click.Context) -> MoonrakerClient:
         params.get("api_key") or os.environ.get("MOONRAKER_API_KEY") or get_printer_api_key(config)
     )
     timeout = params.get("timeout", 30.0)
+    return url, api_key, timeout
 
+
+def build_client(ctx: click.Context) -> MoonrakerClient:
+    """Build a synchronous MoonrakerClient from the current Click context."""
+    url, api_key, timeout = _resolve_connection_params(ctx)
     return MoonrakerClient(base_url=url, api_key=api_key, timeout=timeout)
+
+
+def build_async_client(ctx: click.Context) -> AsyncMoonrakerClient:
+    """Build an AsyncMoonrakerClient for WebSocket commands.
+
+    The caller manages the client lifecycle via ``async with``.
+    """
+    url, api_key, timeout = _resolve_connection_params(ctx)
+    return AsyncMoonrakerClient(base_url=url, api_key=api_key, timeout=timeout)
 
 
 def get_client(ctx: click.Context) -> MoonrakerClient:
