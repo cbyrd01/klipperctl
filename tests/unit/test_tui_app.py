@@ -216,3 +216,21 @@ class TestKlipperAppMounted:
                 from klipperctl.tui.screens.commands import ResultModal
 
                 assert isinstance(app.screen, ResultModal)
+
+    @pytest.mark.asyncio
+    async def test_run_cli_command_error_shows_notification(self) -> None:
+        """Failed CLI commands should show a notification, not a ResultModal."""
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40), notifications=True) as pilot:
+                # Run a command that will fail (nonexistent subcommand)
+                app.run_cli_command(["printer", "nonexistent"], title="Bad Command")
+                await pilot.pause(delay=1.0)
+                # Should NOT show ResultModal — should show notification
+                from klipperctl.tui.screens.dashboard import DashboardScreen
+
+                assert isinstance(app.screen, DashboardScreen)

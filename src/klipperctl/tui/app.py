@@ -177,7 +177,7 @@ class KlipperApp(App):
 
         import asyncio
 
-        def _run() -> str:
+        def _run() -> tuple[str, int]:
             from click.testing import CliRunner
 
             from klipperctl.cli import cli
@@ -188,11 +188,17 @@ class KlipperApp(App):
                 cli_args.extend(["--api-key", self._api_key])
             cli_args.extend(args)
             result = runner.invoke(cli, cli_args)
-            return result.output or "(no output)"
+            if result.exit_code != 0:
+                # Prefer stderr for errors, fall back to stdout
+                error_text = (result.stderr or result.output or "").strip()
+                if not error_text:
+                    error_text = f"Command failed (exit code {result.exit_code})"
+                return error_text, result.exit_code
+            return result.output or "(no output)", 0
 
-        async def _worker() -> tuple[str, str]:
-            output = await asyncio.to_thread(_run)
-            return title, output
+        async def _worker() -> tuple[str, str, int]:
+            output, exit_code = await asyncio.to_thread(_run)
+            return title, output, exit_code
 
         self.run_worker(_worker, group="cli_command")
 
@@ -226,7 +232,10 @@ class KlipperApp(App):
         result = event.worker.result
         if result is None:
             return
-        title, output = result
-        from klipperctl.tui.screens.commands import ResultModal
+        title, output, exit_code = result
+        if exit_code != 0:
+            self.notify(output, title=title, severity="error", timeout=8)
+        else:
+            from klipperctl.tui.screens.commands import ResultModal
 
-        self.push_screen(ResultModal(title=title, content=output))
+            self.push_screen(ResultModal(title=title, content=output))
