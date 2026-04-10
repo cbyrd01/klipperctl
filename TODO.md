@@ -182,7 +182,7 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 - [x] Full functional suite green against live virtual printer (309 passed / 1 skipped)
 - [x] ruff + mypy clean in both repos
 - [x] No regressions
-- [ ] Committed AND pushed
+- [x] Committed AND pushed (klipperctl 75d3809, moonraker-client 155f770)
 
 ### Tasks
 - [x] Tighten callback type hints on `AsyncMoonrakerClient.on`/`off`
@@ -193,6 +193,6 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
   - commit: n/a (already in place)   pushed: n/a
 - [x] README multi-printer TOML profile example + Troubleshooting section
   - Acceptance: "Multiple printers" section with copy-pasteable TOML + `--printer` selector; "Troubleshooting" table covering connection, auth, timeout, klippy shutdown, remote-file-not-found, TUI freeze, logs `--watch`
-  - commit: (pending)   pushed: —
+  - commit: 75d3809   pushed: yes
 - [ ] Docstrings on private helpers (deferred — spot-fixes folded into each phase as needed; no outstanding gaps identified in the review)
   - commit: n/a   pushed: n/a
