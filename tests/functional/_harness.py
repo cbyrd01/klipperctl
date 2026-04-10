@@ -121,12 +121,23 @@ class WorkflowRunner(ABC):
 # Sentinel gcode — small dwell-only file used by start-and-cancel workflows
 # --------------------------------------------------------------------------- #
 
-SENTINEL_GCODE = """; klipperctl functional-test sentinel
-; Safe: pure dwell, no motion, no heating.
-M117 klipperctl test sentinel
-G4 P60000
-M117 sentinel done
-"""
+# Sentinel gcode for start-and-cancel workflows. Must:
+# - put the printer in `printing` state long enough to observe (10-30s)
+# - contain no heating, no motion, no filament
+# - NOT use a single long `G4` dwell - the moonraker-virtual-printer's
+#   simulated MCU crashes with "Rescheduled timer in the past" when
+#   asked for a multi-second dwell, leaving Klipper in a shutdown state
+#   that can only be cleared with FIRMWARE_RESTART. Many short dwells
+#   interleaved with M117 messages give the host work to do without
+#   tripping any MCU timer limits.
+_SENTINEL_TICKS = 60  # 60 * 200ms ~= 12 seconds of print time
+SENTINEL_GCODE = (
+    "; klipperctl functional-test sentinel\n"
+    "; Safe: short dwells + M117 only. No motion, no heating, no filament.\n"
+    "M117 klipperctl sentinel start\n"
+    + "".join(f"M117 tick {i}\nG4 P200\n" for i in range(_SENTINEL_TICKS))
+    + "M117 klipperctl sentinel done\n"
+)
 
 
 def _sentinel_filename() -> str:
@@ -156,6 +167,20 @@ def _scan_gcode_store_for(client: MoonrakerClient, marker: str) -> bool:
     return any(marker in (e.get("message") or "") for e in entries)
 
 
+def _read_print_state(client: MoonrakerClient) -> str:
+    """Return ``print_stats.state`` (standby/printing/paused/...).
+
+    ``PrinterStatus.state`` from the helpers is the *Klippy* state, which
+    stays ``"ready"`` while a print is running. For workflow tests we care
+    about the print_stats.state field, which actually transitions to
+    ``"printing"`` and back. Query it directly so runners are unambiguous.
+    """
+    result = client.printer_objects_query({"print_stats": ["state"]})
+    status = result.get("status", {}) if isinstance(result, dict) else {}
+    print_stats = status.get("print_stats", {}) if isinstance(status, dict) else {}
+    return str(print_stats.get("state", "") or "")
+
+
 # --------------------------------------------------------------------------- #
 # Library runner
 # --------------------------------------------------------------------------- #
@@ -170,10 +195,8 @@ class LibraryRunner(WorkflowRunner):
         self._client = client
 
     async def get_state(self) -> str:
-        from moonraker_client.helpers import get_printer_status
-
         def _call() -> str:
-            return get_printer_status(self._client).state
+            return _read_print_state(self._client)
 
         return await asyncio.to_thread(_call)
 
@@ -278,10 +301,19 @@ class CliModalityRunner(WorkflowRunner):
         await asyncio.to_thread(_run)
 
     async def get_state(self) -> str:
-        data = await self._invoke_json("printer", "status")
-        if isinstance(data, dict):
-            return str(data.get("state", ""))
-        return ""
+        # `klipperctl printer status` surfaces the *klippy* state (stays
+        # "ready" during a print). Workflows care about `print_stats.state`
+        # — the actual print-lifecycle field — which the CLI doesn't expose
+        # at the top level. Drop to a direct library client just for this
+        # read; the CLI modality's job is to verify commands *reach* the
+        # printer through the CLI, not to reimplement every query path.
+        from moonraker_client import MoonrakerClient
+
+        def _call() -> str:
+            with MoonrakerClient(base_url=self._url, timeout=15.0) as c:
+                return _read_print_state(c)
+
+        return await asyncio.to_thread(_call)
 
     async def set_hotend_temp(self, target: float) -> None:
         await self._invoke_ok("printer", "set-temp", "--hotend", str(target))
@@ -392,11 +424,9 @@ class TuiRunner(WorkflowRunner):
         # be brittle across Textual versions. The TUI modality's job is
         # to prove commands reach the printer *through* the TUI worker
         # path; independent verification stays orthogonal.
-        from moonraker_client.helpers import get_printer_status
-
         def _call() -> str:
             with self._lib_client() as c:
-                return get_printer_status(c).state
+                return _read_print_state(c)
 
         return await asyncio.to_thread(_call)
 

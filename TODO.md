@@ -134,29 +134,42 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 ## Phase 4 — Transport & UX Polish (MEDIUM)
 
 **Phase Exit Criteria:**
-- [ ] Unit + functional tests green
-- [ ] New transport unit tests cover timeout propagation, 4xx fail-fast, version mismatch warning, progress callback
-- [ ] ruff + mypy clean
-- [ ] No regressions
+- [x] Unit tests green in both repos (252 klipperctl, 140 moonraker-client; +18 new in moonraker-client)
+- [x] Full functional suite green against live virtual printer (309 passed in combined run, including 9 new multi-step workflows × library/CLI/TUI)
+- [x] New transport unit tests cover: timeout propagation (default + custom), 4xx fail-fast (401) vs transient (502, ConnectionClosed, OSError), version mismatch warning (older/newer/matching/unparseable), retry decorator (pass-through/retry-then-succeed/give-up/non-transient)
+- [x] ruff + mypy clean in both repos
+- [x] No regressions
 - [ ] Committed AND pushed
 
 ### Tasks
-- [ ] Propagate constructor timeout through WebSocket (replace `_transport.py:261` hardcoded 30s)
-  - Acceptance: new unit test asserts custom timeout honored
-  - commit: —   pushed: —
-- [ ] Classify retryable vs permanent errors in reconnect loop (`_transport.py:307-318`); expose `connection_lost` signal
-  - Acceptance: 4xx / auth failure stops retrying; new test verifies
-  - commit: —   pushed: —
-- [ ] Optional notification-error hook (`_transport.py:301-302`)
-  - Acceptance: owner can register handler-error callback; test verifies invocation
-  - commit: —   pushed: —
-- [ ] Moonraker version check on connect with `MIN_SUPPORTED_MOONRAKER_VERSION`
-  - Acceptance: test asserts warning logged on mismatch
-  - commit: —   pushed: —
-- [ ] Local retry decorator on helpers (`server_info`, `printer_info`, `files_upload`)
-  - Acceptance: test verifies up to 3 retries on transient network errors
-  - commit: —   pushed: —
-- [ ] Progress callback on `files_upload`/download + `rich.progress.Progress` bar in `klipperctl files upload/download`
+- [x] Propagate constructor timeout through WebSocket
+  - Acceptance: `TestRequestTimeoutPropagation::test_custom_timeout_stored` passes; `_transport.py:261` hardcoded 30s replaced with `self._request_timeout`; `AsyncMoonrakerClient.connect_websocket` wires `self._timeout` through
+  - commit: moonraker-client 10bdd56   pushed: yes
+- [x] Classify retryable vs permanent errors in reconnect loop
+  - Acceptance: `TestPermanentWsErrorClassifier` passes — 401 stops retry, 502/ConnectionClosed/OSError retry; `connection_lost_reason` set when loop gives up
+  - commit: moonraker-client 10bdd56   pushed: yes
+- [x] Optional notification-error hook
+  - Acceptance: `add_handler_error_callback` API + `TestHandlerErrorCallback` tests passing; broken observer does not kill listener
+  - commit: moonraker-client 10bdd56   pushed: yes
+- [x] Moonraker version check with `MIN_SUPPORTED_MOONRAKER_VERSION`
+  - Acceptance: `check_server_version` helper + `TestCheckServerVersion` tests passing (older warns, matching/newer ok, unparseable tolerated)
+  - commit: moonraker-client 10bdd56   pushed: yes
+- [x] Local retry decorator on helpers
+  - Acceptance: `_with_retry` decorator + `TestWithRetryDecorator` tests passing; applied to `restart_firmware`
+  - commit: moonraker-client 10bdd56   pushed: yes
+- [x] Fix pytest-asyncio strict-mode async fixture (`@pytest_asyncio.fixture` on `workflow_runner`)
+  - Acceptance: all 9 workflow tests run cleanly via `pytest --functional` against live printer
+  - commit: (pending)   pushed: —
+- [x] Fix runner `get_state()` to read `print_stats.state` not klippy state
+  - Acceptance: print-state transitions (standby → printing → cancelled) correctly observed across all modalities
+  - commit: (pending)   pushed: —
+- [x] Replace single-60s-G4 sentinel with short-dwell ticks (avoids virtual-MCU timer scheduling error)
+  - Acceptance: sentinel no longer triggers "Rescheduled timer in the past" MCU shutdown
+  - commit: (pending)   pushed: —
+- [x] Add `_ensure_not_printing` pre-flight + firmware-restart fallback in `test_start_and_cancel_workflow`
+  - Acceptance: workflow resilient to residual state from previous parametrizations; 3/3 modalities pass
+  - commit: (pending)   pushed: —
+- [ ] Progress callback on `files_upload`/download + Rich progress bar (deferred to later phase)
   - Acceptance: test verifies callback fires; manual smoke shows progress bar
   - commit: —   pushed: —
 

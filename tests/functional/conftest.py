@@ -32,6 +32,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING
 
 import pytest
+import pytest_asyncio
 
 from tests.functional._harness import (
     CliModalityRunner,
@@ -151,7 +152,7 @@ def modality(request: pytest.FixtureRequest) -> str:
     return str(request.param)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def workflow_runner(
     modality: str,
     moonraker_url: str,
