@@ -139,7 +139,7 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 - [x] New transport unit tests cover: timeout propagation (default + custom), 4xx fail-fast (401) vs transient (502, ConnectionClosed, OSError), version mismatch warning (older/newer/matching/unparseable), retry decorator (pass-through/retry-then-succeed/give-up/non-transient)
 - [x] ruff + mypy clean in both repos
 - [x] No regressions
-- [ ] Committed AND pushed
+- [x] Committed AND pushed (klipperctl 1f059d1, moonraker-client 10bdd56)
 
 ### Tasks
 - [x] Propagate constructor timeout through WebSocket
@@ -159,16 +159,16 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
   - commit: moonraker-client 10bdd56   pushed: yes
 - [x] Fix pytest-asyncio strict-mode async fixture (`@pytest_asyncio.fixture` on `workflow_runner`)
   - Acceptance: all 9 workflow tests run cleanly via `pytest --functional` against live printer
-  - commit: (pending)   pushed: —
+  - commit: 1f059d1   pushed: yes
 - [x] Fix runner `get_state()` to read `print_stats.state` not klippy state
   - Acceptance: print-state transitions (standby → printing → cancelled) correctly observed across all modalities
-  - commit: (pending)   pushed: —
+  - commit: 1f059d1   pushed: yes
 - [x] Replace single-60s-G4 sentinel with short-dwell ticks (avoids virtual-MCU timer scheduling error)
   - Acceptance: sentinel no longer triggers "Rescheduled timer in the past" MCU shutdown
-  - commit: (pending)   pushed: —
+  - commit: 1f059d1   pushed: yes
 - [x] Add `_ensure_not_printing` pre-flight + firmware-restart fallback in `test_start_and_cancel_workflow`
   - Acceptance: workflow resilient to residual state from previous parametrizations; 3/3 modalities pass
-  - commit: (pending)   pushed: —
+  - commit: 1f059d1   pushed: yes
 - [ ] Progress callback on `files_upload`/download + Rich progress bar (deferred to later phase)
   - Acceptance: test verifies callback fires; manual smoke shows progress bar
   - commit: —   pushed: —
