@@ -19,25 +19,25 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 - [x] Local wheels install in a throwaway venv and `klipperctl --help` works (including `klipperctl[tui]`)
 - [x] ruff + mypy clean in both repos
 - [x] No regressions in existing functional suites (skipped without MOONRAKER_URL)
-- [ ] Committed AND pushed to origin
+- [x] Committed AND pushed to origin (klipperctl 7470543, moonraker-client cd4d4c0)
 - [x] **Nothing uploaded to PyPI**
 
 ### Tasks
 - [x] Fix misleading `moonraker-client>=0.1.0` dep in klipperctl/pyproject.toml (use plain name marker; document two-step install)
   - Acceptance: dep line matches reality; throwaway-venv install succeeds
-  - commit: (pending)   pushed: —
+  - commit: 7470543   pushed: yes
 - [x] Verify local build for moonraker-client
   - Acceptance: `python -m build` produces sdist + wheel with correct metadata
-  - commit: (pending)   pushed: —
+  - commit: 7470543   pushed: yes
 - [x] Verify local build for klipperctl
   - Acceptance: `python -m build` produces sdist + wheel
-  - commit: (pending)   pushed: —
+  - commit: 7470543   pushed: yes
 - [x] Throwaway-venv smoke test from local wheels
   - Acceptance: `pip install dist/moonraker_client-*.whl dist/klipperctl-*.whl` then `klipperctl --help` works
-  - commit: (pending)   pushed: —
+  - commit: 7470543   pushed: yes
 - [x] Update README install section (remove false `pip install klipperctl` claim, document two-step git install + sibling-checkout dev path)
   - Acceptance: README matches actual working install steps
-  - commit: (pending)   pushed: —
+  - commit: 7470543   pushed: yes
 - [x] Fix pre-existing ruff format drift in `moonraker-client/src/moonraker_client/helpers.py` (unblocks exit criteria)
   - Acceptance: `ruff format --check` clean in moonraker-client
   - commit: (pending)   pushed: —
