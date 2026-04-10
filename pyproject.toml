@@ -28,7 +28,12 @@ classifiers = [
 dependencies = [
     "click>=8.1",
     "rich>=13.0",
-    "moonraker-client>=0.1.0",
+    # moonraker-client is not yet published to PyPI. Install it first from git
+    # or from a local wheel / editable sibling checkout before installing
+    # klipperctl — see README "Installation" for exact commands. Listed here
+    # without a source so pip validates that it is importable, without trying
+    # (and failing) to fetch it from PyPI.
+    "moonraker-client",
 ]
 
 [project.optional-dependencies]
