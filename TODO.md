@@ -116,18 +116,18 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 - [x] No regressions in unit or pre-existing functional tests (252 unit passed; 58 functional collected and skip cleanly without MOONRAKER_URL)
 - [x] 9 new workflow tests parametrize cleanly (3 workflows × 3 modalities = 9 tests; all skip without MOONRAKER_URL)
 - [x] ruff + mypy clean
-- [ ] Committed AND pushed
+- [x] Committed AND pushed (262df44)
 
 ### Tasks
 - [x] heat-and-verify workflow (set temp → wait reached → verify state → cool down)
   - Acceptance: 3 parametrizations (library/cli/tui) collect and skip cleanly without MOONRAKER_URL; live-printer run left to the user
-  - commit: (pending)   pushed: —
+  - commit: 262df44   pushed: yes
 - [x] start-and-cancel workflow (upload sentinel → start → verify printing → cancel → verify idle)
   - Acceptance: 3 parametrizations collect and skip cleanly; teardown cancels any in-flight print; sentinel uses pure `G4 P60000` dwell (no motion/heating)
-  - commit: (pending)   pushed: —
+  - commit: 262df44   pushed: yes
 - [x] gcode-log roundtrip workflow (send M118 marker → tail logs → assert seen)
   - Acceptance: 3 parametrizations collect and skip cleanly; marker is a unique `KLIPPERCTL_TEST_<hex>` to avoid collisions
-  - commit: (pending)   pushed: —
+  - commit: 262df44   pushed: yes
 
 ---
 
