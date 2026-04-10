@@ -40,7 +40,7 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
   - commit: 7470543   pushed: yes
 - [x] Fix pre-existing ruff format drift in `moonraker-client/src/moonraker_client/helpers.py` (unblocks exit criteria)
   - Acceptance: `ruff format --check` clean in moonraker-client
-  - commit: (pending)   pushed: —
+  - commit: 1d05145   pushed: yes
 
 ---
 
@@ -53,24 +53,24 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 - [x] New unit tests added for each fix and passing
 - [x] ruff + mypy clean
 - [x] No regressions
-- [ ] Committed AND pushed
+- [x] Committed AND pushed (1d05145)
 
 ### Tasks
 - [x] Surface TUI poll-worker errors via `self.notify` with throttling (app.py)
   - Acceptance: `test_tui_app.py::test_poll_error_notifies_and_backs_off` passes; repeat identical errors don't re-notify
-  - commit: (pending)   pushed: —
+  - commit: 1d05145   pushed: yes
 - [x] Add timeout wrapper to TUI cli_command worker
   - Acceptance: `test_tui_app.py::test_cli_command_timeout_returns_exit_124` passes
-  - commit: (pending)   pushed: —
+  - commit: 1d05145   pushed: yes
 - [x] Add `poll_interval` constructor arg + exponential backoff on consecutive errors
   - Acceptance: `test_tui_app.py::test_poll_success_after_error_resets_backoff` passes
-  - commit: (pending)   pushed: —
+  - commit: 1d05145   pushed: yes
 - [x] Decouple FileNotFoundError mapping in cli.py (catch at real call site in print_cmd.start)
   - Acceptance: `test_stray_file_not_found_is_not_user_input` + `test_remote_file_not_found_exits_3` pass
-  - commit: (pending)   pushed: —
+  - commit: 1d05145   pushed: yes
 - [x] Narrow bare `except Exception` in `_logs_tail` (server.py) with consecutive-failure warning
   - Acceptance: now catches only `MoonrakerError`, so `KeyboardInterrupt` propagates; warns after 5 consecutive failures
-  - commit: (pending)   pushed: —
+  - commit: 1d05145   pushed: yes
 - [x] Narrow bare `except Exception` in `_show_temps` (printer.py)
   - Acceptance: narrowed to `MoonrakerError` with debug log
   - commit: (pending)   pushed: —
