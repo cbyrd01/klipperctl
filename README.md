@@ -67,6 +67,51 @@ export MOONRAKER_URL=http://your-printer:7125
 klipperctl --url http://your-printer:7125 status
 ```
 
+### Multiple printers
+
+`klipperctl` can manage several printers via named profiles. The config
+file lives at `~/.config/klipperctl/config.toml` on Linux,
+`~/Library/Application Support/klipperctl/config.toml` on macOS, and
+`%APPDATA%\klipperctl\config.toml` on Windows. It's created 0o600 (user
+only), since profiles may carry API keys.
+
+```toml
+# ~/.config/klipperctl/config.toml
+default_printer = "voron"
+
+[printers.voron]
+url = "http://voron.local:7125"
+api_key = "optional-moonraker-api-key"
+
+[printers.ender3]
+url = "http://192.168.1.42:7125"
+
+[printers.virtual]
+url = "http://localhost:7125"
+```
+
+Select a profile per-invocation with `--printer`:
+
+```bash
+klipperctl --printer ender3 status
+klipperctl --printer voron print start benchy.gcode
+```
+
+`--url` always wins over `--printer`, and `MOONRAKER_URL` wins over
+the default profile.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `Cannot connect to Moonraker at ...` (exit 2) | Wrong `--url`, printer powered off, or Moonraker not running | Verify with `curl http://your-printer:7125/server/info`. Check `sudo systemctl status moonraker` on the printer. |
+| `Authentication required` (exit 2) | API key required but missing | Set `--api-key`, `MOONRAKER_API_KEY`, or add `api_key = "..."` to your profile. |
+| `Request timed out` (exit 2) | Slow network, busy printer, or a long-running gcode blocking the dispatch | Increase `--timeout`. For `print cancel`, the printer may still be chewing on the cancel sequence; wait and retry. |
+| Commands succeed but `klippy_state` is `shutdown` | Klipper hit a runtime error (config, MCU timer, etc.) | `klipperctl printer firmware-restart`. Investigate `klippy.log` via `klipperctl server logs`. |
+| `File not found on printer` (exit 3) | `print start` with a filename that isn't in the gcodes root | `klipperctl files list` to confirm the exact path; upload with `klipperctl files upload`. |
+| TUI dashboard frozen / no updates | Transient network error during polling; the TUI now surfaces these as error toasts and backs off exponentially | Wait a few seconds; the poll timer recovers automatically. If the error persists, use `klipperctl printer status` directly to diagnose. |
+| Logs command exits immediately | No `--watch` flag | Add `--watch` to tail. Use `--exclude-temps` and `--filter` to focus on interesting output. |
+
 ## Commands
 
 ### Printer Control

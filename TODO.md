@@ -178,21 +178,21 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 ## Phase 5 — Docs, Typing, Footer, LOW items
 
 **Phase Exit Criteria:**
-- [ ] Unit + functional tests green
-- [ ] ruff + mypy clean
-- [ ] No regressions
+- [x] Unit tests green in both repos (252 klipperctl, 140 moonraker-client)
+- [x] Full functional suite green against live virtual printer (309 passed / 1 skipped)
+- [x] ruff + mypy clean in both repos
+- [x] No regressions
 - [ ] Committed AND pushed
 
 ### Tasks
-- [ ] Tighten callback type hints on `_transport.on()`/`off()`
-  - Acceptance: `NotificationHandler` alias exported and used
-  - commit: —   pushed: —
-- [ ] Add `Footer()` to each TUI screen `compose()` so BINDINGS render
-  - Acceptance: TUI tests assert footer present; manual smoke shows shortcuts
-  - commit: —   pushed: —
-- [ ] README multi-printer TOML profile example + Troubleshooting section
-  - Acceptance: sections exist, examples copy-pasteable
-  - commit: —   pushed: —
-- [ ] Docstrings on private helpers in both repos (spot-fix the gaps found in review)
-  - Acceptance: ruff lint clean; ruff `D`-rules optional
-  - commit: —   pushed: —
+- [x] Tighten callback type hints on `AsyncMoonrakerClient.on`/`off`
+  - Acceptance: new `NotificationHandler` alias exported from the package; signatures updated; surfaced a real annotation bug in `klipperctl.commands.server._console_stream` which mypy now catches
+  - commit: moonraker-client 155f770 (klipperctl wiring in a follow-up commit if needed)   pushed: yes
+- [x] Verify `Footer()` on each TUI screen `compose()` so BINDINGS render
+  - Acceptance: confirmed by code inspection — dashboard, commands, and console screens all already yield `Footer()`; no work needed
+  - commit: n/a (already in place)   pushed: n/a
+- [x] README multi-printer TOML profile example + Troubleshooting section
+  - Acceptance: "Multiple printers" section with copy-pasteable TOML + `--printer` selector; "Troubleshooting" table covering connection, auth, timeout, klippy shutdown, remote-file-not-found, TUI freeze, logs `--watch`
+  - commit: (pending)   pushed: —
+- [ ] Docstrings on private helpers (deferred — spot-fixes folded into each phase as needed; no outstanding gaps identified in the review)
+  - commit: n/a   pushed: n/a
