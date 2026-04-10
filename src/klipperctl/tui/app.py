@@ -29,18 +29,26 @@ class KlipperApp(App):
     }
     """
 
+    # Polling backoff: on consecutive errors the interval grows 2→4→8→16→30s
+    # and resets to the base interval on the next successful poll.
+    _POLL_BACKOFF_MAX: ClassVar[float] = 30.0
+
     def __init__(
         self,
         printer_url: str = "http://localhost:7125",
         api_key: str | None = None,
         timeout: float = 30.0,
+        poll_interval: float = 2.0,
         **kwargs: object,
     ) -> None:
         super().__init__(**kwargs)
         self._printer_url = printer_url
         self._api_key = api_key
         self._timeout = timeout
+        self._poll_interval = poll_interval
         self._poll_timer: Any = None
+        self._last_poll_error: str | None = None
+        self._consecutive_poll_errors = 0
 
     def on_mount(self) -> None:
         """Set up the dashboard and start polling."""
@@ -52,8 +60,30 @@ class KlipperApp(App):
         self.install_screen(ConsoleScreen(), "console")
         self.install_screen(CommandMenuScreen(), "commands")
         self.push_screen("dashboard")
-        self._poll_timer = self.set_interval(2.0, self.poll_printer)
+        self._poll_timer = self.set_interval(self._poll_interval, self.poll_printer)
         self.poll_printer()
+
+    def _schedule_poll_backoff(self) -> None:
+        """Reschedule the poll timer with exponential backoff after errors."""
+        if self._poll_timer is None:
+            return
+        # 2s → 4 → 8 → 16 → 30s (capped)
+        delay = min(
+            self._poll_interval * (2 ** max(0, self._consecutive_poll_errors - 1)),
+            self._POLL_BACKOFF_MAX,
+        )
+        self._poll_timer.stop()
+        self._poll_timer = self.set_interval(delay, self.poll_printer)
+
+    def _reset_poll_backoff(self) -> None:
+        """Reset the poll interval back to the base after a successful poll."""
+        if self._consecutive_poll_errors == 0 or self._poll_timer is None:
+            self._consecutive_poll_errors = 0
+            return
+        self._consecutive_poll_errors = 0
+        self._last_poll_error = None
+        self._poll_timer.stop()
+        self._poll_timer = self.set_interval(self._poll_interval, self.poll_printer)
 
     def action_switch_screen(self, screen_name: str) -> None:
         """Switch to a named screen."""
@@ -106,13 +136,29 @@ class KlipperApp(App):
             return
         if event.worker.group == "poll":
             data = event.worker.result
-            if data is None or "_error" in data:
+            if data is None:
                 return
+            if "_error" in data:
+                self._on_poll_error(str(data["_error"]))
+                return
+            self._reset_poll_backoff()
             self._update_dashboard(data)
         elif event.worker.group == "cli_command":
             self._on_cli_result(event)
         elif event.worker.group == "fetch_list":
             self._on_fetch_list_result(event)
+
+    def _on_poll_error(self, message: str) -> None:
+        """Surface a poll worker error to the user and apply backoff.
+
+        Only notifies when the error message *changes*, so a persistently
+        down printer does not spam the notification stack.
+        """
+        self._consecutive_poll_errors += 1
+        if message != self._last_poll_error:
+            self._last_poll_error = message
+            self.notify(message, title="Polling error", severity="error", timeout=6)
+        self._schedule_poll_backoff()
 
     def _on_fetch_list_result(self, event: Worker.StateChanged) -> None:
         result = event.worker.result
@@ -196,8 +242,22 @@ class KlipperApp(App):
                 return error_text, result.exit_code
             return result.output or "(no output)", 0
 
+        # Give the CLI command a generous upper bound relative to the HTTP
+        # timeout so a stuck Moonraker call (or runaway worker) cannot hang
+        # the entire TUI. Exit code 124 matches coreutils `timeout`.
+        cli_command_timeout = self._timeout + 5.0
+
         async def _worker() -> tuple[str, str, int]:
-            output, exit_code = await asyncio.to_thread(_run)
+            try:
+                output, exit_code = await asyncio.wait_for(
+                    asyncio.to_thread(_run), timeout=cli_command_timeout
+                )
+            except TimeoutError:
+                return (
+                    title,
+                    f"Command timed out after {cli_command_timeout:.0f}s",
+                    124,
+                )
             return title, output, exit_code
 
         self.run_worker(_worker, group="cli_command")

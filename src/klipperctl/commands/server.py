@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import TYPE_CHECKING
 
@@ -12,9 +13,6 @@ from moonraker_client.exceptions import MoonrakerError
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
 from klipperctl.filtering import MessageFilter, build_filter
-
-if TYPE_CHECKING:
-    from moonraker_client import MoonrakerClient
 from klipperctl.output import (
     console,
     format_timestamp,
@@ -23,6 +21,13 @@ from klipperctl.output import (
     output_json,
     unwrap_result,
 )
+
+if TYPE_CHECKING:
+    from moonraker_client import MoonrakerClient
+
+_logger = logging.getLogger(__name__)
+
+_LOGS_TAIL_WARN_AFTER = 5
 
 
 @click.group()
@@ -155,15 +160,30 @@ def _logs_tail(
     interval: float,
     count: int | None,
 ) -> None:
-    """Tail-follow gcode store, printing only new entries."""
+    """Tail-follow gcode store, printing only new entries.
+
+    Transient Moonraker errors (network blips, brief restarts) keep the loop
+    alive; `KeyboardInterrupt` propagates so Ctrl+C still exits immediately.
+    After ``_LOGS_TAIL_WARN_AFTER`` consecutive failures we print a warning
+    so the user isn't staring at a dead tail.
+    """
     last_time = time.time()
+    consecutive_failures = 0
 
     while True:
         time.sleep(interval)
         try:
             result = client.server_gcodestore(count=count)
-        except Exception:
+        except MoonrakerError as exc:
+            _logger.debug("server_gcodestore transient failure: %s", exc)
+            consecutive_failures += 1
+            if consecutive_failures == _LOGS_TAIL_WARN_AFTER:
+                console.print(
+                    f"[yellow]warning:[/yellow] log tail has failed "
+                    f"{consecutive_failures} times in a row: {exc}"
+                )
             continue
+        consecutive_failures = 0
         entries = unwrap_result(result, "gcode_store")
         new_entries = [e for e in entries if e.get("time", 0) > last_time]
         if new_entries:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import click
 from moonraker_client import MoonrakerClient
 from moonraker_client.exceptions import MoonrakerError
@@ -40,7 +42,13 @@ def start(ctx: click.Context, filename: str) -> None:
         else:
             console.print(f"Print started: {filename}")
     except FileNotFoundError as e:
-        _handle_error(ctx, e)
+        # helpers.start_print raises FileNotFoundError for a missing *remote*
+        # file. Surface it as a user-input error (exit 3) with a clean message
+        # instead of delegating to the generic Moonraker error handler.
+        from klipperctl.output import output_error
+
+        output_error(str(e), code=3)
+        sys.exit(3)
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 

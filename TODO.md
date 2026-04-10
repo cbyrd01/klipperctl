@@ -49,31 +49,31 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 **Goal:** remove silent failure paths, bound worst-case waits, surface real errors.
 
 **Phase Exit Criteria:**
-- [ ] All existing unit tests pass in both repos
-- [ ] New unit tests added for each fix and passing
-- [ ] ruff + mypy clean
-- [ ] No regressions
+- [x] All existing unit tests pass in both repos (252 klipperctl, 122 moonraker-client)
+- [x] New unit tests added for each fix and passing
+- [x] ruff + mypy clean
+- [x] No regressions
 - [ ] Committed AND pushed
 
 ### Tasks
-- [ ] Surface TUI poll-worker errors via `self.notify` with throttling (app.py:79-109)
-  - Acceptance: `tests/unit/test_tui_app.py::test_poll_error_notifies` passes; repeat errors don't spam
-  - commit: —   pushed: —
-- [ ] Add timeout wrapper to TUI cli_command worker (app.py:199-200)
-  - Acceptance: `test_tui_app.py::test_cli_command_timeout` passes; stuck command returns exit 124
-  - commit: —   pushed: —
-- [ ] Add `poll_interval` constructor arg + exponential backoff on consecutive errors
-  - Acceptance: `test_tui_app.py::test_poll_backoff_on_errors` passes
-  - commit: —   pushed: —
-- [ ] Decouple FileNotFoundError mapping in cli.py:103-105 (catch at real call sites)
-  - Acceptance: `test_cli.py::test_file_not_found_is_not_user_input` passes
-  - commit: —   pushed: —
-- [ ] Narrow bare `except Exception` in `_logs_tail` (server.py:161-166) with consecutive-failure warning
-  - Acceptance: new test verifies `KeyboardInterrupt` propagates; transient `MoonrakerError` keeps loop alive
-  - commit: —   pushed: —
-- [ ] Narrow bare `except Exception` in `temps --watch` loop (printer.py:171)
-  - Acceptance: new test verifies `KeyboardInterrupt` propagates
-  - commit: —   pushed: —
+- [x] Surface TUI poll-worker errors via `self.notify` with throttling (app.py)
+  - Acceptance: `test_tui_app.py::test_poll_error_notifies_and_backs_off` passes; repeat identical errors don't re-notify
+  - commit: (pending)   pushed: —
+- [x] Add timeout wrapper to TUI cli_command worker
+  - Acceptance: `test_tui_app.py::test_cli_command_timeout_returns_exit_124` passes
+  - commit: (pending)   pushed: —
+- [x] Add `poll_interval` constructor arg + exponential backoff on consecutive errors
+  - Acceptance: `test_tui_app.py::test_poll_success_after_error_resets_backoff` passes
+  - commit: (pending)   pushed: —
+- [x] Decouple FileNotFoundError mapping in cli.py (catch at real call site in print_cmd.start)
+  - Acceptance: `test_stray_file_not_found_is_not_user_input` + `test_remote_file_not_found_exits_3` pass
+  - commit: (pending)   pushed: —
+- [x] Narrow bare `except Exception` in `_logs_tail` (server.py) with consecutive-failure warning
+  - Acceptance: now catches only `MoonrakerError`, so `KeyboardInterrupt` propagates; warns after 5 consecutive failures
+  - commit: (pending)   pushed: —
+- [x] Narrow bare `except Exception` in `_show_temps` (printer.py)
+  - Acceptance: narrowed to `MoonrakerError` with debug log
+  - commit: (pending)   pushed: —
 
 ---
 

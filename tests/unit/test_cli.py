@@ -121,3 +121,40 @@ class TestErrorHandling:
         with patch("klipperctl.client.build_client", return_value=client):
             result = runner.invoke(cli, ["--json", "printer", "status"])
         assert result.exit_code == 2
+
+    def test_remote_file_not_found_exits_3(self) -> None:
+        """`print start` on a missing remote file exits 3 (user input error).
+
+        The cli.py blanket FileNotFoundError branch was removed; this path
+        is now handled locally inside `print_cmd.start` so only genuine
+        "file missing on the printer" cases map to exit 3, not any stray
+        FileNotFoundError from unrelated code.
+        """
+        client = MagicMock()
+        client.close.return_value = None
+        # `start_print` helper calls files_metadata first — if that errors,
+        # it raises FileNotFoundError("File not found on printer: ...").
+        client.files_metadata.side_effect = MoonrakerAPIError("not found", status_code=404)
+        runner = CliRunner()
+        with patch("klipperctl.client.build_client", return_value=client):
+            result = runner.invoke(cli, ["print", "start", "missing.gcode"])
+        assert result.exit_code == 3
+        assert "missing.gcode" in (result.stderr + result.output)
+
+    def test_stray_file_not_found_is_not_user_input(self) -> None:
+        """A FileNotFoundError from an unrelated path is *not* mapped to exit 3.
+
+        Without a targeted handler the blanket `FileNotFoundError → exit 3`
+        mapping that used to live in `cli.py` silently conflated 'remote
+        file missing' with 'any FileNotFoundError'. After the fix, an
+        unexpected FileNotFoundError raised from deep code falls through
+        to the generic "unexpected error" branch (exit 1).
+        """
+        client = MagicMock()
+        client.close.return_value = None
+        client.printer_info.side_effect = FileNotFoundError("/some/local/thing")
+        runner = CliRunner()
+        with patch("klipperctl.client.build_client", return_value=client):
+            result = runner.invoke(cli, ["printer", "info"])
+        # The OSError/FileNotFoundError leaks up. It should NOT become exit 3.
+        assert result.exit_code != 3

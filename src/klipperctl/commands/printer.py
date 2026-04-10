@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 
 import click
@@ -35,6 +36,8 @@ from klipperctl.output import (
     unwrap_result,
     watch_loop,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 @click.group()
@@ -168,8 +171,10 @@ def _show_temps(client: MoonrakerClient, show_all: bool) -> None:
                             target=data.get("target", 0.0),
                             power=data.get("power", 0.0),
                         )
-        except Exception:
-            pass
+        except MoonrakerError as exc:
+            # Best-effort enrichment. Surface at debug so `--watch` keeps
+            # rolling while still letting KeyboardInterrupt propagate.
+            _logger.debug("printer_objects_list/query transient failure: %s", exc)
 
     data = {
         name: {"current": t.current, "target": t.target, "power": t.power}

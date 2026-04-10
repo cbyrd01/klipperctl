@@ -100,9 +100,6 @@ def _handle_error(ctx: click.Context, error: Exception) -> None:
     elif isinstance(error, MoonrakerAPIError):
         output_error(str(error), code=1)
         sys.exit(1)
-    elif isinstance(error, FileNotFoundError):
-        output_error(str(error), code=3)
-        sys.exit(3)
     elif isinstance(error, click.Abort):
         sys.exit(130)
     else:

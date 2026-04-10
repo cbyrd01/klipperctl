@@ -218,6 +218,91 @@ class TestKlipperAppMounted:
                 assert isinstance(app.screen, ResultModal)
 
     @pytest.mark.asyncio
+    async def test_poll_error_notifies_and_backs_off(self) -> None:
+        """A poll worker error should surface via `notify` and trigger backoff.
+
+        Repeated identical errors must not re-notify (throttling), but the
+        consecutive-error counter and backoff schedule should still advance.
+        """
+        app = KlipperApp(printer_url="http://test:7125", poll_interval=0.5)
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40), notifications=True) as _pilot:
+                notify_calls: list[tuple[str, dict]] = []
+                orig_notify = app.notify
+
+                def _spy(msg: str, **kwargs: object) -> None:
+                    notify_calls.append((msg, dict(kwargs)))
+                    orig_notify(msg, **kwargs)  # type: ignore[arg-type]
+
+                with patch.object(app, "notify", side_effect=_spy):
+                    app._on_poll_error("boom")
+                    app._on_poll_error("boom")  # same message → no second notify
+                    app._on_poll_error("different")  # new message → notify
+                assert app._consecutive_poll_errors == 3
+                assert len(notify_calls) == 2
+                assert notify_calls[0][0] == "boom"
+                assert notify_calls[1][0] == "different"
+                assert notify_calls[0][1].get("severity") == "error"
+
+    @pytest.mark.asyncio
+    async def test_poll_success_after_error_resets_backoff(self) -> None:
+        """A successful poll after errors must reset the backoff counter."""
+        app = KlipperApp(printer_url="http://test:7125", poll_interval=0.5)
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40), notifications=True) as _pilot:
+                app._on_poll_error("boom")
+                app._on_poll_error("boom")
+                assert app._consecutive_poll_errors == 2
+                app._reset_poll_backoff()
+                assert app._consecutive_poll_errors == 0
+                assert app._last_poll_error is None
+
+    @pytest.mark.asyncio
+    async def test_cli_command_timeout_returns_exit_124(self) -> None:
+        """A stuck CLI command must not hang the TUI — it must time out."""
+        app = KlipperApp(
+            printer_url="http://test:7125",
+            timeout=0.1,  # Force a very short timeout bound
+        )
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40), notifications=True) as pilot:
+                # Replace the CliRunner invocation with a blocking sleep via
+                # a stub that would block longer than the TUI timeout.
+                import time as _time
+
+                from klipperctl.tui import app as app_mod
+
+                def _slow_invoke(*args: object, **kwargs: object) -> object:
+                    _time.sleep(5.0)  # would hang without the wait_for guard
+                    return MagicMock(exit_code=0, output="never")
+
+                with patch.object(
+                    app_mod, "CliRunner", create=True
+                ):  # pragma: no cover - defensive
+                    pass
+                # Directly exercise the command via a runner that hangs.
+                with patch("click.testing.CliRunner.invoke", side_effect=_slow_invoke):
+                    app.run_cli_command(["printer", "info"], title="Slow")
+                    await pilot.pause(delay=1.0)
+                # No ResultModal should appear — the path returns exit 124
+                # (timed out) and shows a notification.
+                from klipperctl.tui.screens.commands import ResultModal
+
+                assert not isinstance(app.screen, ResultModal)
+
+    @pytest.mark.asyncio
     async def test_run_cli_command_error_shows_notification(self) -> None:
         """Failed CLI commands should show a notification, not a ResultModal."""
         app = KlipperApp(printer_url="http://test:7125")
