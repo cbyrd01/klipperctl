@@ -40,7 +40,7 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
   - commit: 7470543   pushed: yes
 - [x] Fix pre-existing ruff format drift in `moonraker-client/src/moonraker_client/helpers.py` (unblocks exit criteria)
   - Acceptance: `ruff format --check` clean in moonraker-client
-  - commit: 1d05145   pushed: yes
+  - commit: moonraker-client cd4d4c0   pushed: yes
 
 ---
 
@@ -73,7 +73,7 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
   - commit: 1d05145   pushed: yes
 - [x] Narrow bare `except Exception` in `_show_temps` (printer.py)
   - Acceptance: narrowed to `MoonrakerError` with debug log
-  - commit: (pending)   pushed: —
+  - commit: 1d05145   pushed: yes
 
 ---
 
