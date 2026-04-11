@@ -172,12 +172,12 @@ async def test_backfill_shows_recent_store_entries(
     ``DashboardConsoleWidget._on_history_loaded`` →
     ``append_history_entry`` path against the live printer.
     """
+    from moonraker_client import MoonrakerClient
+    from moonraker_client.helpers import send_gcode
     from textual.widgets import RichLog
 
     from klipperctl.tui.app import KlipperApp
     from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
-    from moonraker_client import MoonrakerClient
-    from moonraker_client.helpers import send_gcode
 
     _ = printer_ready
 
@@ -196,8 +196,122 @@ async def test_backfill_shows_recent_store_entries(
         log = widget.query_one("#console-log", RichLog)
         rendered = "\n".join(str(line) for line in log.lines)
         assert marker in rendered, (
-            f"backfilled marker {marker!r} not visible in console log; "
-            f"log was:\n{rendered}"
+            f"backfilled marker {marker!r} not visible in console log; log was:\n{rendered}"
+        )
+
+
+async def test_dashboard_console_streams_new_entries_live(
+    moonraker_url: str, printer_ready: bool
+) -> None:
+    """New gcode store activity from another client must stream into the
+    dashboard console log without the user touching the input.
+
+    Starts the TUI, waits for the initial backfill to settle, then
+    uses a separate library client (simulating another Moonraker
+    consumer — a macro, Mainsail, another TUI session, a slicer, etc.)
+    to send a unique ``M118`` marker. The live-tail poll inside the
+    widget should pick it up within ~1-2 poll intervals and render it.
+    """
+    from moonraker_client import MoonrakerClient
+    from moonraker_client.helpers import send_gcode
+    from textual.widgets import RichLog
+
+    from klipperctl.tui.app import KlipperApp
+    from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+    _ = printer_ready
+
+    # Use a short tail interval so the test doesn't sit around waiting
+    # for the default 2s cadence.
+    app = KlipperApp(printer_url=moonraker_url, poll_interval=1.0)
+    async with app.run_test(size=(140, 48)) as pilot:
+        widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+        # Speed up the tail for the test so we don't wait 2s per poll.
+        widget._tail_interval = 0.5
+        # Re-start the tail timer at the new interval.
+        if widget._tail_timer is not None:
+            with contextlib.suppress(Exception):
+                widget._tail_timer.stop()
+            widget._tail_timer = None
+        widget._start_tail()
+
+        # Let backfill complete.
+        await pilot.pause(delay=1.5)
+
+        # Record the watermark post-backfill so we can detect that the
+        # live-tail path (not the backfill path) is what rendered the
+        # marker.
+        post_backfill_watermark = widget._last_time
+
+        # Now inject activity from "another client".
+        marker = f"KLIPPERCTL_STREAM_{uuid.uuid4().hex[:10]}"
+        with MoonrakerClient(base_url=moonraker_url, timeout=15.0) as client:
+            send_gcode(client, f"M118 {marker}")
+
+        # Wait for up to a few poll intervals for the tail to catch it.
+        log = widget.query_one("#console-log", RichLog)
+        deadline = asyncio.get_event_loop().time() + 12.0
+        seen = False
+        while asyncio.get_event_loop().time() < deadline:
+            await pilot.pause(delay=0.5)
+            rendered = "\n".join(str(line) for line in log.lines)
+            if marker in rendered:
+                seen = True
+                break
+
+        assert seen, (
+            f"live-tail did not pick up marker {marker!r} within 12s; "
+            f"log was:\n{' | '.join(str(line) for line in log.lines)}"
+        )
+        # Watermark should have advanced past the backfill value.
+        assert widget._last_time > post_backfill_watermark, (
+            f"watermark did not advance; before={post_backfill_watermark}, "
+            f"after={widget._last_time}"
+        )
+
+
+async def test_dashboard_console_does_not_double_echo_local_command(
+    moonraker_url: str, printer_ready: bool
+) -> None:
+    """Submitting a command via the widget must produce exactly one echo,
+    not one from the local path and another from the live-tail poll.
+    """
+    from textual.widgets import Input, RichLog
+
+    from klipperctl.tui.app import KlipperApp
+    from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+    _ = printer_ready
+
+    app = KlipperApp(printer_url=moonraker_url, poll_interval=1.0)
+    async with app.run_test(size=(140, 48)) as pilot:
+        widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+        # Fast tail so we observe any duplicate within the test window.
+        widget._tail_interval = 0.4
+        if widget._tail_timer is not None:
+            with contextlib.suppress(Exception):
+                widget._tail_timer.stop()
+            widget._tail_timer = None
+        widget._start_tail()
+
+        await pilot.pause(delay=1.5)
+
+        # Use a distinctive marker so we can count occurrences precisely.
+        marker = f"KLIPPERCTL_LOCAL_ECHO_{uuid.uuid4().hex[:10]}"
+        input_widget = widget.query_one("#dash-gcode-input", Input)
+        widget.on_input_submitted(Input.Submitted(input_widget, f"M118 {marker}"))
+
+        # Let the send-gcode worker and at least a couple of tail
+        # polls run so any duplicate would have shown up by now.
+        await pilot.pause(delay=2.5)
+
+        log = widget.query_one("#console-log", RichLog)
+        rendered = "\n".join(str(line) for line in log.lines)
+        # Count command-echo lines containing the marker. Exactly one
+        # "> M118 <marker>" line should exist.
+        echoes = sum(1 for line in rendered.splitlines() if f"> M118 {marker}" in line)
+        assert echoes == 1, (
+            f"expected exactly one local echo of the marker, found {echoes}; log was:\n{rendered}"
         )
 
 

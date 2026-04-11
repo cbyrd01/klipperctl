@@ -272,12 +272,17 @@ The TUI provides:
   `M117 hello`) without leaving the dashboard: press `g` to focus
   the input, type a command, press Enter. The console pre-fills on
   launch with the last ~25 entries from Moonraker's gcode store so
-  you see recent printer activity immediately. Up/Down recalls the
-  last 50 commands you've submitted in this session. Press Escape
-  to release focus from the input and return to the dashboard's
-  single-key bindings (escape does NOT quit while the input is
-  focused). Replies render green (success) or red (error) in a
-  scrolling log above the input.
+  you see recent printer activity immediately, and then **streams
+  new activity live**: commands sent from any other client (Mainsail,
+  a slicer, a running macro, another TUI session) or by your own
+  print show up in the dashboard log within about a second, without
+  you having to refresh or switch screens. Your own locally-submitted
+  commands are deduped against the stream so you don't see double
+  echoes. Up/Down recalls the last 50 commands you've submitted in
+  this session. Press Escape to release focus from the input and
+  return to the dashboard's single-key bindings (escape does NOT
+  quit while the input is focused). Replies render green (success)
+  or red (error) in a scrolling log above the input.
 - **Console**: Full-screen GCode console with WebSocket streaming,
   for when you want to tail responses or send a long session of
   commands.

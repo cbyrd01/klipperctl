@@ -798,6 +798,277 @@ class TestDashboardConsoleEscape:
         assert "height: 1" not in input_block
 
 
+class TestDashboardConsoleLiveTail:
+    """Tests for the async streaming tail of the gcode store."""
+
+    @pytest.mark.asyncio
+    async def test_tail_renders_new_entries_above_watermark(self) -> None:
+        """Tail must render entries whose time is newer than the watermark."""
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {
+                "gcode_store": [
+                    {"time": 1000.0, "type": "command", "message": "M104 S200"},
+                ]
+            }
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.3)
+
+                widget._on_tail_entries([{"time": 2000.0, "type": "command", "message": "G28"}])
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "G28" in rendered
+                assert widget._last_time == 2000.0
+
+    @pytest.mark.asyncio
+    async def test_tail_skips_entries_at_or_below_watermark(self) -> None:
+        """Entries whose timestamp <= watermark must not be re-rendered."""
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.3)
+                widget._last_time = 5000.0
+
+                log = widget.query_one("#console-log", RichLog)
+                baseline = len(log.lines)
+
+                widget._on_tail_entries(
+                    [
+                        {"time": 4000.0, "type": "command", "message": "OLD"},
+                        {"time": 5000.0, "type": "command", "message": "SAME"},
+                    ]
+                )
+
+                assert len(log.lines) == baseline
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "OLD" not in rendered
+                assert "SAME" not in rendered
+                assert widget._last_time == 5000.0
+
+    @pytest.mark.asyncio
+    async def test_tail_dedupes_recent_local_command(self) -> None:
+        """Tail entry matching a just-submitted local command must be skipped."""
+        from textual.widgets import Input, RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.gcode_script.return_value = "ok"
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.3)
+
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                widget.on_input_submitted(Input.Submitted(input_widget, "G28"))
+                await pilot.pause(delay=0.2)
+
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                echoes_before = rendered.count("G28")
+                assert echoes_before == 1
+
+                widget._on_tail_entries([{"time": 9999.0, "type": "command", "message": "G28"}])
+                rendered_after = "\n".join(str(line) for line in log.lines)
+                assert rendered_after.count("G28") == echoes_before, (
+                    "tail should have skipped the duplicate local command"
+                )
+                assert widget._last_time >= 9999.0
+
+    @pytest.mark.asyncio
+    async def test_tail_skips_responses_within_local_submit_window(self) -> None:
+        """A response within 3s of a local submission is assumed local."""
+        from textual.widgets import Input, RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.gcode_script.return_value = "FIRMWARE_NAME: Klipper"
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.3)
+
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                widget.on_input_submitted(Input.Submitted(input_widget, "M115"))
+                await pilot.pause(delay=0.3)
+
+                log = widget.query_one("#console-log", RichLog)
+                baseline = "\n".join(str(line) for line in log.lines)
+
+                widget._on_tail_entries(
+                    [
+                        {
+                            "time": 9999.0,
+                            "type": "response",
+                            "message": "FIRMWARE_NAME: Klipper",
+                        }
+                    ]
+                )
+                after = "\n".join(str(line) for line in log.lines)
+                assert after.count("FIRMWARE_NAME") == baseline.count("FIRMWARE_NAME")
+
+    @pytest.mark.asyncio
+    async def test_tail_renders_entries_from_other_sources(self) -> None:
+        """Entries that don't match any local echo must be rendered."""
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.3)
+
+                widget._on_tail_entries(
+                    [
+                        {"time": 1.0, "type": "command", "message": "REMOTE_MACRO"},
+                        {"time": 2.0, "type": "response", "message": "macro ok"},
+                    ]
+                )
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "REMOTE_MACRO" in rendered
+                assert "macro ok" in rendered
+                assert widget._last_time == 2.0
+
+    @pytest.mark.asyncio
+    async def test_tail_timer_installed_on_mount(self) -> None:
+        """The live-tail interval timer must be installed during on_mount."""
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.2)
+                assert widget._tail_timer is not None
+
+    @pytest.mark.asyncio
+    async def test_backfill_advances_watermark(self) -> None:
+        """After backfill, _last_time must reflect the newest historical entry."""
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {
+                "gcode_store": [
+                    {"time": 1000.0, "type": "command", "message": "A"},
+                    {"time": 2000.0, "type": "response", "message": "B"},
+                    {"time": 3000.0, "type": "command", "message": "C"},
+                ]
+            }
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.5)
+                assert widget._last_time == 3000.0
+
+    def test_entry_time_handles_malformed_values(self) -> None:
+        """_entry_time must coerce bad data to 0.0 rather than crash."""
+        from klipperctl.tui.widgets.dashboard_console import _entry_time
+
+        assert _entry_time({"time": 1.5}) == 1.5
+        assert _entry_time({"time": "1.5"}) == 1.5
+        assert _entry_time({}) == 0.0
+        assert _entry_time({"time": None}) == 0.0
+        assert _entry_time({"time": "garbage"}) == 0.0
+
+    def test_append_live_entry_command_bold(self) -> None:
+        """Live command entries render in bold cyan (not dim)."""
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        captured: list[str] = []
+
+        class _Harness(DashboardConsoleWidget):
+            def _write(self, markup: str) -> None:  # type: ignore[override]
+                captured.append(markup)
+
+        w = _Harness()
+        w.append_live_entry({"type": "command", "message": "G28"})
+        assert any("bold cyan" in c for c in captured)
+        assert any("G28" in c for c in captured)
+
+    def test_append_live_entry_response_green(self) -> None:
+        """Live response entries render in green (visible, not dim)."""
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        captured: list[str] = []
+
+        class _Harness(DashboardConsoleWidget):
+            def _write(self, markup: str) -> None:  # type: ignore[override]
+                captured.append(markup)
+
+        w = _Harness()
+        w.append_live_entry({"type": "response", "message": "ok"})
+        assert any("green" in c for c in captured)
+        assert any("ok" in c for c in captured)
+
+    def test_append_live_entry_empty_skipped(self) -> None:
+        """Empty live entries produce no output."""
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        captured: list[str] = []
+
+        class _Harness(DashboardConsoleWidget):
+            def _write(self, markup: str) -> None:  # type: ignore[override]
+                captured.append(markup)
+
+        w = _Harness()
+        w.append_live_entry({"type": "command", "message": ""})
+        assert captured == []
+
+
 class TestFetchGcodeStore:
     """Unit tests for KlipperApp.fetch_gcode_store (backfill helper)."""
 

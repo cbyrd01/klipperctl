@@ -29,6 +29,7 @@ with an ``on_result`` callback that pipes the response back into
 from __future__ import annotations
 
 import contextlib
+import time
 from collections import deque
 from typing import Any, ClassVar
 
@@ -47,6 +48,26 @@ MAX_HISTORY = 50
 #: a ring buffer internally, so this is just the cap passed at construction.
 MAX_LOG_LINES = 500
 
+#: Default poll interval (seconds) for the live gcode-store tail loop.
+#: Slightly slower than the main printer-status poll so we don't double
+#: the HTTP load on slow networks; real-world printer activity doesn't
+#: change much faster than this anyway.
+DEFAULT_TAIL_INTERVAL = 2.0
+
+#: Max number of entries requested per live-tail poll. Anything
+#: older than the watermark is discarded, so this only caps the
+#: burst size if many events happened between polls.
+DEFAULT_TAIL_COUNT = 50
+
+#: Window within which a live-tail command entry is considered a
+#: duplicate of a recent local submission and skipped.
+_LOCAL_ECHO_DEDUPE_WINDOW = 5.0
+
+#: Window within which a live-tail response entry is assumed to belong
+#: to a just-submitted local command (since the ``send_gcode`` worker's
+#: ``on_result`` callback already rendered the reply).
+_LOCAL_RESPONSE_DEDUPE_WINDOW = 3.0
+
 
 def _normalize_command(raw: str) -> str:
     """Trim surrounding whitespace from a submitted command line.
@@ -55,6 +76,19 @@ def _normalize_command(raw: str) -> str:
     treat as "do nothing".
     """
     return (raw or "").strip()
+
+
+def _entry_time(entry: dict[str, Any]) -> float:
+    """Extract a float timestamp from a gcode store entry.
+
+    Moonraker sends ``time`` as a float (epoch seconds). We coerce
+    defensively so a malformed entry doesn't crash the poll loop.
+    """
+    value = entry.get("time", 0)
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class DashboardConsoleWidget(Widget):
@@ -104,7 +138,12 @@ class DashboardConsoleWidget(Widget):
         ("down", "history_next", "History next"),
     ]
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(
+        self,
+        *,
+        tail_interval: float = DEFAULT_TAIL_INTERVAL,
+        **kwargs: object,
+    ) -> None:
         super().__init__(**kwargs)
         self._history: deque[str] = deque(maxlen=MAX_HISTORY)
         self._history_index: int | None = None
@@ -112,6 +151,17 @@ class DashboardConsoleWidget(Widget):
         # Set by `on_mount` / `_request_backfill` to guard against
         # re-fetching on remount.
         self._backfill_requested: bool = False
+        # Live-tail state: watermark is the server-side timestamp of
+        # the newest entry we've already rendered (from backfill or a
+        # prior poll). Entries with `time <= _last_time` are skipped.
+        self._last_time: float = 0.0
+        self._tail_interval: float = tail_interval
+        self._tail_timer: Any = None
+        # Recent user-submitted commands (with local wall time) used to
+        # dedupe live-tail entries that come from the user's own
+        # interaction with this widget, since the submit path already
+        # echoes + renders the reply locally.
+        self._local_echo_history: deque[tuple[str, float]] = deque(maxlen=20)
 
     def compose(self) -> ComposeResult:
         yield RichLog(
@@ -127,10 +177,84 @@ class DashboardConsoleWidget(Widget):
     def on_mount(self) -> None:
         # Kick off the backfill worker first so it starts while we render
         # the ready line. Entries are appended above the ready line by
-        # `_on_history_loaded`.
+        # `_on_history_loaded`, which also seeds `_last_time` so the
+        # live tail doesn't replay backfilled entries.
         self._backfill_requested = False
         self._request_backfill()
         self.append_info("Dashboard console ready. Type a gcode command.")
+        # Start the live tail. Textual's set_interval is bound to the
+        # widget lifecycle, so the timer is cleaned up automatically
+        # when the dashboard is unmounted (app shutdown, screen pop).
+        self._start_tail()
+
+    def _start_tail(self) -> None:
+        """Install the repeating tail-poll timer."""
+        if self._tail_timer is not None or self._tail_interval <= 0:
+            return
+        try:
+            self._tail_timer = self.set_interval(self._tail_interval, self._poll_tail)
+        except Exception:
+            # Widget not fully mounted yet — test harnesses may
+            # instantiate the widget without a running app loop.
+            self._tail_timer = None
+
+    def _poll_tail(self) -> None:
+        """Fire the live-tail worker. Runs on the timer's schedule."""
+        app = self.app
+        fetch = getattr(app, "fetch_gcode_store", None)
+        if fetch is None:
+            return
+        with contextlib.suppress(Exception):
+            fetch(count=DEFAULT_TAIL_COUNT, on_result=self._on_tail_entries)
+
+    def _on_tail_entries(self, entries: list[dict[str, Any]]) -> None:
+        """Render new gcode store entries that weren't seen before.
+
+        Runs on the event-loop thread (the worker callback is invoked
+        after ``asyncio.to_thread`` resumes). Filters by the watermark
+        and by the local-echo dedupe heuristic, then advances the
+        watermark.
+        """
+        if not entries:
+            return
+        newest = self._last_time
+        for entry in entries:
+            ts = _entry_time(entry)
+            if ts <= self._last_time:
+                continue
+            if self._should_skip_local_duplicate(entry):
+                if ts > newest:
+                    newest = ts
+                continue
+            self.append_live_entry(entry)
+            if ts > newest:
+                newest = ts
+        if newest > self._last_time:
+            self._last_time = newest
+
+    def _should_skip_local_duplicate(self, entry: dict[str, Any]) -> bool:
+        """Return True if this tail entry matches a recent local submission.
+
+        The send-gcode path renders the echo + reply immediately when
+        the user presses Enter, so if the same command (or a response
+        within a tight window) also comes back via the tail poll, we
+        skip it to avoid double rendering.
+        """
+        entry_type = entry.get("type", "response")
+        msg = str(entry.get("message", ""))
+        now = time.time()
+        if entry_type == "command":
+            return any(
+                cmd == msg and now - ts < _LOCAL_ECHO_DEDUPE_WINDOW
+                for cmd, ts in self._local_echo_history
+            )
+        # Response entries don't carry the command string, so we can't
+        # content-match. Assume any response that arrives within a
+        # tight window of a local submission is that submission's
+        # reply — the on_result callback already rendered it.
+        return any(
+            now - ts < _LOCAL_RESPONSE_DEDUPE_WINDOW for _cmd, ts in self._local_echo_history
+        )
 
     def _request_backfill(self) -> None:
         """Ask the app for the last ~25 gcode store entries."""
@@ -147,13 +271,24 @@ class DashboardConsoleWidget(Widget):
             fetch(count=25, on_result=self._on_history_loaded)
 
     def _on_history_loaded(self, entries: list[dict[str, Any]]) -> None:
-        """Callback from the backfill worker. Prepends entries to the log."""
+        """Callback from the backfill worker.
+
+        Appends historical entries to the log and advances the
+        live-tail watermark past the newest one, so the tail loop
+        doesn't re-render what the backfill already showed.
+        """
         if not entries:
             return
         # Render entries oldest-first, matching chronological order on
         # screen. Moonraker returns them already in ascending time order.
+        newest = self._last_time
         for entry in entries:
             self.append_history_entry(entry)
+            ts = _entry_time(entry)
+            if ts > newest:
+                newest = ts
+        if newest > self._last_time:
+            self._last_time = newest
         # Add a visual separator so the user sees where history ends and
         # the live session begins.
         self.append_info("--- end of recent history ---")
@@ -208,6 +343,25 @@ class DashboardConsoleWidget(Widget):
         """Render a dim informational line (not a command, not a reply)."""
         self._write(f"[dim]{text}[/dim]")
 
+    def append_live_entry(self, entry: dict[str, Any]) -> None:
+        """Render a single gcode store entry that arrived via the live tail.
+
+        Unlike :meth:`append_history_entry` (which renders in muted
+        colors because the entries predate the TUI), live entries are
+        rendered in normal colors — they're current activity the user
+        should see clearly. Command entries look the same as a local
+        echo (bold cyan); responses render green.
+        """
+        msg = str(entry.get("message", ""))
+        if not msg:
+            return
+        entry_type = entry.get("type", "response")
+        if entry_type == "command":
+            self._write(f"[bold cyan]> {msg}[/bold cyan]")
+        else:
+            for line in msg.splitlines() or [""]:
+                self._write(f"[green]  {line}[/green]")
+
     def append_history_entry(self, entry: dict[str, Any]) -> None:
         """Render a single Moonraker gcode store entry as a prior-history line.
 
@@ -249,8 +403,23 @@ class DashboardConsoleWidget(Widget):
         # thing is almost always a mistake in a command history.
         if not self._history or self._history[-1] != command:
             self._history.append(command)
+        # Record the local echo so the live-tail poll can skip this
+        # command (and its imminent response) when it shows up in the
+        # gcode store a moment later. We trim to entries within the
+        # longer of the two dedupe windows.
+        self._record_local_echo(command)
         self.append_command(command)
         self.post_message(self.Submitted(command))
+
+    def _record_local_echo(self, command: str) -> None:
+        """Remember a just-submitted command so the tail can dedupe it."""
+        now = time.time()
+        self._local_echo_history.append((command, now))
+        # Prune entries older than the longest dedupe window we care
+        # about so the deque stays tight and the dedupe check is fast.
+        cutoff = now - max(_LOCAL_ECHO_DEDUPE_WINDOW, _LOCAL_RESPONSE_DEDUPE_WINDOW)
+        while self._local_echo_history and self._local_echo_history[0][1] < cutoff:
+            self._local_echo_history.popleft()
 
     def action_history_prev(self) -> None:
         """Step one entry back in the command history (older)."""
