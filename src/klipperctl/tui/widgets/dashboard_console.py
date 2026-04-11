@@ -39,6 +39,7 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Input, RichLog
 
+from klipperctl.filtering import MessageFilter
 from klipperctl.output import format_timestamp
 
 #: Maximum number of recently submitted commands remembered for Up/Down recall.
@@ -142,6 +143,8 @@ class DashboardConsoleWidget(Widget):
         self,
         *,
         tail_interval: float = DEFAULT_TAIL_INTERVAL,
+        release_focus_on_escape: bool = True,
+        msg_filter: MessageFilter | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(**kwargs)
@@ -162,6 +165,16 @@ class DashboardConsoleWidget(Widget):
         # interaction with this widget, since the submit path already
         # echoes + renders the reply locally.
         self._local_echo_history: deque[tuple[str, float]] = deque(maxlen=20)
+        # When True (the dashboard-embedded use case), escape while the
+        # gcode input has focus releases focus and stops the event so
+        # the dashboard's single-key bindings work again. When False
+        # (the full ConsoleScreen use case), escape bubbles to the
+        # parent screen, which typically binds it to pop_screen.
+        self._release_focus_on_escape: bool = release_focus_on_escape
+        # Optional filter applied to both backfill and live-tail
+        # entries. Used by the full ConsoleScreen to honor its existing
+        # `MessageFilter` constructor arg.
+        self._msg_filter: MessageFilter | None = msg_filter
 
     def compose(self) -> ComposeResult:
         yield RichLog(
@@ -226,6 +239,10 @@ class DashboardConsoleWidget(Widget):
                 if ts > newest:
                     newest = ts
                 continue
+            if not self._entry_matches_filter(entry):
+                if ts > newest:
+                    newest = ts
+                continue
             self.append_live_entry(entry)
             if ts > newest:
                 newest = ts
@@ -282,30 +299,44 @@ class DashboardConsoleWidget(Widget):
         # Render entries oldest-first, matching chronological order on
         # screen. Moonraker returns them already in ascending time order.
         newest = self._last_time
+        rendered_any = False
         for entry in entries:
-            self.append_history_entry(entry)
             ts = _entry_time(entry)
             if ts > newest:
                 newest = ts
+            if not self._entry_matches_filter(entry):
+                continue
+            self.append_history_entry(entry)
+            rendered_any = True
         if newest > self._last_time:
             self._last_time = newest
         # Add a visual separator so the user sees where history ends and
-        # the live session begins.
-        self.append_info("--- end of recent history ---")
+        # the live session begins. Skip the separator when the filter
+        # excluded everything — otherwise the user sees a lone
+        # "end of history" line with nothing above it.
+        if rendered_any:
+            self.append_info("--- end of recent history ---")
+
+    def _entry_matches_filter(self, entry: dict[str, Any]) -> bool:
+        """Apply the optional MessageFilter to a gcode store entry."""
+        if self._msg_filter is None:
+            return True
+        msg = str(entry.get("message", ""))
+        return self._msg_filter.matches(msg)
 
     def on_key(self, event: events.Key) -> None:
         """Handle escape while the gcode input has focus.
 
-        Using ``on_key`` (not ``BINDINGS``) lets us:
-
-        1. Scope the behavior to the case where the Input is actually
-           focused — escape from the dashboard proper should still
-           fall through to the screen's quit binding.
-        2. Call ``event.stop()`` + ``event.prevent_default()`` so the
-           event does *not* bubble up to the DashboardScreen, which
-           would otherwise trigger ``app.quit``.
+        When ``release_focus_on_escape`` is True (dashboard-embedded
+        use case), escape releases focus and stops event propagation
+        so the DashboardScreen's ``("escape", "app.quit")`` binding
+        does not fire. When False (full ConsoleScreen use case),
+        escape bubbles to the parent screen so a single press pops
+        the screen cleanly.
         """
         if event.key != "escape":
+            return
+        if not self._release_focus_on_escape:
             return
         try:
             input_widget = self.query_one("#dash-gcode-input", Input)

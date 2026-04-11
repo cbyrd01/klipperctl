@@ -747,6 +747,25 @@ class TestDashboardConsoleBackfill:
 class TestDashboardConsoleEscape:
     """Tests for the escape-releases-focus behavior (bug 3)."""
 
+    def test_escape_noop_when_release_focus_disabled(self) -> None:
+        """When release_focus_on_escape is False, on_key returns early
+        so escape bubbles to the parent screen.
+
+        This is the full-ConsoleScreen use case: one press of escape
+        should pop the screen back, rather than being swallowed by
+        the widget to release input focus.
+        """
+        from textual import events
+
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        widget = DashboardConsoleWidget(release_focus_on_escape=False)
+        fake_event = events.Key(key="escape", character=None)
+        # Should be a no-op — no access to a focused input (the
+        # widget isn't mounted), no raising. The early-return guard
+        # protects against the unmounted-widget crash path too.
+        widget.on_key(fake_event)
+
     @pytest.mark.asyncio
     async def test_escape_releases_focus_without_quitting(self) -> None:
         """Pressing Escape while the input is focused must release

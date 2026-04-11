@@ -283,9 +283,14 @@ The TUI provides:
   return to the dashboard's single-key bindings (escape does NOT
   quit while the input is focused). Replies render green (success)
   or red (error) in a scrolling log above the input.
-- **Console**: Full-screen GCode console with WebSocket streaming,
-  for when you want to tail responses or send a long session of
-  commands.
+- **Console**: Full-screen GCode console with the same backfill +
+  live-streaming + dedupe behavior as the dashboard-embedded console,
+  expanded to fill the entire screen for when you want a larger
+  scrollback to tail printer activity or run a long session of
+  commands. Supports an optional `MessageFilter` (set
+  programmatically) to suppress noisy entries like temperature
+  reports. Press Escape to return to the dashboard in a single
+  keypress.
 - **Command Menu**: Nested menus exposing all 11 command groups with smart selection lists (files, devices, services, components), input forms, and confirmation dialogs
 
 Keyboard shortcuts: `d` Dashboard, `c` Full Console, `m` Commands, `g` focus embedded gcode input, `r` Refresh, `q`/`Escape` Quit (dashboard, no input focus), `Escape` Back (other screens). Inside the dashboard gcode input: Up/Down cycles command history, Escape releases focus back to the dashboard (does not quit the app).

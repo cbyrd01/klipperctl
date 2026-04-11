@@ -81,21 +81,37 @@ class TestDashboardScreen:
 class TestConsoleScreen:
     @pytest.mark.asyncio
     async def test_console_screen_renders(self) -> None:
+        """The full ConsoleScreen embeds a DashboardConsoleWidget.
+
+        After Phase 4c, the full ConsoleScreen no longer owns an
+        inline RichLog + Input — it composes a
+        ``DashboardConsoleWidget`` (ID ``full-console``) which itself
+        contains the log (``#console-log``) and input
+        (``#dash-gcode-input``). Both IDs are walked by
+        ``query_one`` on the screen, so the existing smoke checks
+        still find them — we just updated the input ID to match.
+        """
         app = KlipperApp(printer_url="http://test:7125")
         with patch.object(app, "_build_sync_client") as mock_build:
             mock_client = MagicMock()
             mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
             mock_client.close.return_value = None
             mock_build.return_value = mock_client
             async with app.run_test(size=(120, 40)) as pilot:
                 await pilot.press("c")
                 await pilot.pause()
                 from klipperctl.tui.screens.console import ConsoleScreen
+                from klipperctl.tui.widgets.dashboard_console import (
+                    DashboardConsoleWidget,
+                )
 
                 assert isinstance(app.screen, ConsoleScreen)
+                widget = app.screen.query_one("#full-console", DashboardConsoleWidget)
+                assert widget is not None
                 log = app.screen.query_one("#console-log")
                 assert log is not None
-                inp = app.screen.query_one("#gcode-input")
+                inp = app.screen.query_one("#dash-gcode-input")
                 assert inp is not None
 
     @pytest.mark.asyncio
@@ -131,6 +147,7 @@ class TestConsoleScreen:
         with patch.object(app, "_build_sync_client") as mock_build:
             mock_client = MagicMock()
             mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
             mock_client.close.return_value = None
             mock_build.return_value = mock_client
             async with app.run_test(size=(120, 40)) as pilot:
@@ -144,6 +161,171 @@ class TestConsoleScreen:
                 from klipperctl.tui.screens.dashboard import DashboardScreen
 
                 assert isinstance(app.screen, DashboardScreen)
+
+    @pytest.mark.asyncio
+    async def test_console_backfill_renders_history(self) -> None:
+        """Full console must render backfilled entries on mount — no
+        blank screen with only a ready line.
+        """
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.screens.console import ConsoleScreen
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {
+                "gcode_store": [
+                    {"time": 1000.0, "type": "command", "message": "G28"},
+                    {"time": 1001.0, "type": "response", "message": "ok"},
+                    {"time": 1002.0, "type": "command", "message": "M115"},
+                ]
+            }
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.press("c")
+                await pilot.pause(delay=0.5)
+                assert isinstance(app.screen, ConsoleScreen)
+                log = app.screen.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "G28" in rendered
+                assert "M115" in rendered
+                # Ready line also still present.
+                assert "Dashboard console ready" in rendered
+
+    @pytest.mark.asyncio
+    async def test_console_does_not_render_literal_markup(self) -> None:
+        """Regression: the ready line and other info lines must NOT
+        render as literal ``[dim]...[/dim]`` bracket text.
+
+        This pins the bug where the old ConsoleScreen built its
+        RichLog with ``markup=False`` so the ``[dim]GCode console
+        ready. Type commands below.[/dim]`` string was shown
+        verbatim instead of being styled.
+        """
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.screens.console import ConsoleScreen
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.press("c")
+                await pilot.pause(delay=0.3)
+                assert isinstance(app.screen, ConsoleScreen)
+                log = app.screen.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                # The ready line is present...
+                assert "ready" in rendered.lower() or "Dashboard console ready" in rendered
+                # ...but must not contain the literal bracket markup.
+                assert "[dim]" not in rendered
+                assert "[/dim]" not in rendered
+
+    @pytest.mark.asyncio
+    async def test_console_live_tail_timer_installed(self) -> None:
+        """Full console must start the live-tail poll timer on mount."""
+        from klipperctl.tui.screens.console import ConsoleScreen
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.press("c")
+                await pilot.pause(delay=0.3)
+                assert isinstance(app.screen, ConsoleScreen)
+                widget = app.screen.query_one("#full-console", DashboardConsoleWidget)
+                assert widget._tail_timer is not None
+                # Full-console uses the non-release escape path.
+                assert widget._release_focus_on_escape is False
+
+    @pytest.mark.asyncio
+    async def test_console_submit_wires_to_send_gcode(self) -> None:
+        """Enter in the full console's input must dispatch to send_gcode
+        and render the reply through the widget's on_result callback.
+        """
+        from textual.widgets import Input, RichLog
+
+        from klipperctl.tui.screens.console import ConsoleScreen
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.gcode_script.return_value = "ok"
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.press("c")
+                await pilot.pause(delay=0.3)
+                assert isinstance(app.screen, ConsoleScreen)
+                widget = app.screen.query_one("#full-console", DashboardConsoleWidget)
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                widget.on_input_submitted(Input.Submitted(input_widget, "G28"))
+                await pilot.pause(delay=0.5)
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "G28" in rendered
+                assert "ok" in rendered
+                mock_client.gcode_script.assert_called_with("G28")
+
+    @pytest.mark.asyncio
+    async def test_console_filter_excludes_temp_backfill_entries(self) -> None:
+        """A MessageFilter passed to ConsoleScreen must exclude matching
+        backfill entries.
+        """
+        from textual.widgets import RichLog
+
+        from klipperctl.filtering import MessageFilter
+        from klipperctl.tui.screens.console import ConsoleScreen
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            # Mix of regular entries and a temperature report that
+            # should be excluded by the filter.
+            mock_client.server_gcodestore.return_value = {
+                "gcode_store": [
+                    {"time": 1.0, "type": "command", "message": "G28"},
+                    {
+                        "time": 2.0,
+                        "type": "response",
+                        "message": "B:25.0 /0.0 T0:23.0 /0.0",
+                    },
+                    {"time": 3.0, "type": "command", "message": "M115"},
+                ]
+            }
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+
+            # Install a filtered ConsoleScreen as the known screen so
+            # pilot.press('c') reaches it.
+            filtered = ConsoleScreen(msg_filter=MessageFilter(exclude_temps=True))
+            async with app.run_test(size=(120, 40)) as pilot:
+                app.install_screen(filtered, "filtered-console")
+                app.push_screen("filtered-console")
+                await pilot.pause(delay=0.5)
+
+                widget_log = filtered.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in widget_log.lines)
+                assert "G28" in rendered
+                assert "M115" in rendered
+                # The temperature report should be filtered out.
+                assert "B:25.0" not in rendered
 
 
 class TestCommandMenuScreen:
