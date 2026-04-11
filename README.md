@@ -270,16 +270,20 @@ The TUI provides:
   the printer is to the requested temperature. The embedded console
   at the bottom lets you fire off quick commands (`G28`, `M115`,
   `M117 hello`) without leaving the dashboard: press `g` to focus
-  the input, type a command, press Enter. Up/Down recalls the last
-  50 commands. Escape blurs the input so the single-key dashboard
-  bindings work again. Replies render green (success) or red
-  (error) in a scrolling log above the input.
+  the input, type a command, press Enter. The console pre-fills on
+  launch with the last ~25 entries from Moonraker's gcode store so
+  you see recent printer activity immediately. Up/Down recalls the
+  last 50 commands you've submitted in this session. Press Escape
+  to release focus from the input and return to the dashboard's
+  single-key bindings (escape does NOT quit while the input is
+  focused). Replies render green (success) or red (error) in a
+  scrolling log above the input.
 - **Console**: Full-screen GCode console with WebSocket streaming,
   for when you want to tail responses or send a long session of
   commands.
 - **Command Menu**: Nested menus exposing all 11 command groups with smart selection lists (files, devices, services, components), input forms, and confirmation dialogs
 
-Keyboard shortcuts: `d` Dashboard, `c` Full Console, `m` Commands, `g` focus embedded gcode input, `r` Refresh, `q`/`Escape` Quit (dashboard), `Escape` Back / blur input (elsewhere). Inside the dashboard gcode input, Up/Down cycles history and Escape releases focus back to the dashboard.
+Keyboard shortcuts: `d` Dashboard, `c` Full Console, `m` Commands, `g` focus embedded gcode input, `r` Refresh, `q`/`Escape` Quit (dashboard, no input focus), `Escape` Back (other screens). Inside the dashboard gcode input: Up/Down cycles command history, Escape releases focus back to the dashboard (does not quit the app).
 
 See [docs/TUI.md](docs/TUI.md) for the full TUI guide.
 

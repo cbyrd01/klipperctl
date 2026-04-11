@@ -610,3 +610,244 @@ class TestDashboardConsoleWidget:
                 rendered = "\n".join(str(line) for line in log.lines)
                 assert "NOT_A_COMMAND" in rendered
                 assert "Unknown command" in rendered
+
+
+class TestDashboardConsoleBackfill:
+    """Tests for the mount-time gcode store backfill (bug 1)."""
+
+    @pytest.mark.asyncio
+    async def test_backfills_gcode_store_on_mount(self) -> None:
+        """The widget should call app.fetch_gcode_store on mount and
+        render returned entries above the 'ready' line.
+        """
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            # Pretend the virtual printer has three recent entries.
+            mock_client.server_gcodestore.return_value = {
+                "gcode_store": [
+                    {"time": 1700000000.0, "type": "command", "message": "G28"},
+                    {"time": 1700000001.0, "type": "response", "message": "ok"},
+                    {"time": 1700000002.0, "type": "command", "message": "M115"},
+                ]
+            }
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                # Wait for the backfill worker + callback round trip.
+                await pilot.pause(delay=0.5)
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "G28" in rendered
+                assert "ok" in rendered
+                assert "M115" in rendered
+                # Ready line still there.
+                assert "Dashboard console ready" in rendered
+                # Backfill was actually called.
+                mock_client.server_gcodestore.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_backfill_on_empty_store_is_clean(self) -> None:
+        """If the store is empty, the widget just shows the ready line."""
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.5)
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "Dashboard console ready" in rendered
+                # No end-of-history separator when there's nothing to show.
+                assert "end of recent history" not in rendered
+
+    @pytest.mark.asyncio
+    async def test_backfill_error_is_silent(self) -> None:
+        """Errors during backfill must not crash the mount path."""
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.side_effect = RuntimeError("boom")
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                # Should still mount cleanly.
+                await pilot.pause(delay=0.5)
+                assert widget is not None
+
+    def test_append_history_entry_command(self) -> None:
+        """append_history_entry handles command-type entries."""
+        # Pure function-like test — no Textual app needed because we
+        # hit _write indirectly through a minimal harness.
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        captured: list[str] = []
+
+        class _Harness(DashboardConsoleWidget):
+            def _write(self, markup: str) -> None:  # type: ignore[override]
+                captured.append(markup)
+
+        w = _Harness()
+        w.append_history_entry({"time": 1700000000.0, "type": "command", "message": "G28"})
+        assert any("G28" in c for c in captured)
+        assert any("dim cyan" in c for c in captured)
+
+    def test_append_history_entry_response(self) -> None:
+        """append_history_entry handles response-type entries in plain dim."""
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        captured: list[str] = []
+
+        class _Harness(DashboardConsoleWidget):
+            def _write(self, markup: str) -> None:  # type: ignore[override]
+                captured.append(markup)
+
+        w = _Harness()
+        w.append_history_entry({"time": 1700000000.0, "type": "response", "message": "ok"})
+        assert any("ok" in c for c in captured)
+        # Response entries use plain dim (not "dim cyan" which is for commands).
+        assert not any("dim cyan" in c for c in captured)
+
+    def test_append_history_entry_empty_message_skipped(self) -> None:
+        """Empty messages should produce no output."""
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        captured: list[str] = []
+
+        class _Harness(DashboardConsoleWidget):
+            def _write(self, markup: str) -> None:  # type: ignore[override]
+                captured.append(markup)
+
+        w = _Harness()
+        w.append_history_entry({"time": 1700000000.0, "type": "command", "message": ""})
+        assert captured == []
+
+
+class TestDashboardConsoleEscape:
+    """Tests for the escape-releases-focus behavior (bug 3)."""
+
+    @pytest.mark.asyncio
+    async def test_escape_releases_focus_without_quitting(self) -> None:
+        """Pressing Escape while the input is focused must release
+        focus and NOT trigger app.quit.
+        """
+        from textual.widgets import Input
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                # Focus the input so escape's "release focus" path fires.
+                input_widget.focus()
+                await pilot.pause(delay=0.1)
+                assert input_widget.has_focus
+                # Press escape via the real pilot key path.
+                await pilot.press("escape")
+                await pilot.pause(delay=0.1)
+                # Focus must have been released from the input.
+                assert not input_widget.has_focus
+                # And the app must still be alive (not quit).
+                assert app.is_running
+
+    def test_input_css_does_not_clip_to_one_row(self) -> None:
+        """Regression guard for bug 2: the Input must not be clamped to
+        a single row, which would hide typed text entirely.
+        """
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        css = DashboardConsoleWidget.DEFAULT_CSS
+        # The fix removes the `height: 1` line on #dash-gcode-input.
+        # Guard against it creeping back in.
+        assert "#dash-gcode-input" in css
+        # No `height: 1` within the input rule.
+        # (The outer widget has `height: 14`, so we look for the input
+        # selector's block specifically.)
+        input_block_start = css.find("#dash-gcode-input")
+        input_block_end = css.find("}", input_block_start)
+        input_block = css[input_block_start:input_block_end]
+        assert "height: 1" not in input_block
+
+
+class TestFetchGcodeStore:
+    """Unit tests for KlipperApp.fetch_gcode_store (backfill helper)."""
+
+    @pytest.mark.asyncio
+    async def test_callback_invoked_with_entries(self) -> None:
+        """The callback must receive the gcode_store list verbatim."""
+        from klipperctl.tui.app import KlipperApp
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {
+                "gcode_store": [
+                    {"time": 1.0, "type": "command", "message": "G28"},
+                    {"time": 2.0, "type": "response", "message": "ok"},
+                ]
+            }
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                captured: list[list[dict]] = []
+
+                def _on_result(entries: list[dict]) -> None:
+                    captured.append(entries)
+
+                app.fetch_gcode_store(count=10, on_result=_on_result)
+                await pilot.pause(delay=0.5)
+                assert captured, "fetch_gcode_store callback was not invoked"
+                assert len(captured[0]) == 2
+                assert captured[0][0]["message"] == "G28"
+
+    @pytest.mark.asyncio
+    async def test_callback_gets_empty_list_on_error(self) -> None:
+        """When the sync call raises, the callback receives []."""
+        from klipperctl.tui.app import KlipperApp
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.side_effect = RuntimeError("boom")
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                captured: list[list[dict]] = []
+
+                def _on_result(entries: list[dict]) -> None:
+                    captured.append(entries)
+
+                app.fetch_gcode_store(count=10, on_result=_on_result)
+                await pilot.pause(delay=0.5)
+                assert captured == [[]]

@@ -197,6 +197,53 @@ class KlipperApp(App):
         if heaters:
             screen.update_temperatures(heaters)
 
+    def fetch_gcode_store(
+        self,
+        count: int = 25,
+        on_result: Any = None,
+    ) -> None:
+        """Fetch the most recent gcode store entries in a background worker.
+
+        Args:
+            count: Maximum number of entries to request from Moonraker.
+            on_result: Callback ``(entries: list[dict]) -> None`` invoked
+                on completion. On failure the callback receives an empty
+                list so the caller can render a clean "no history" state
+                without needing a separate error path.
+
+        Mirrors the :meth:`send_gcode` worker pattern: run sync I/O in a
+        thread via ``asyncio.to_thread`` so the event loop stays free.
+        """
+        import asyncio
+        import contextlib
+
+        def _fetch() -> list[dict[str, Any]]:
+            try:
+                client = self._build_sync_client()
+                try:
+                    result = client.server_gcodestore(count=count)
+                finally:
+                    client.close()
+            except Exception:
+                return []
+            # Moonraker's gcode store is delivered under "gcode_store" on
+            # the unwrapped result; fall back gracefully if the shape is
+            # unexpected.
+            if isinstance(result, dict):
+                entries = result.get("gcode_store")
+                if isinstance(entries, list):
+                    return [e for e in entries if isinstance(e, dict)]
+            return []
+
+        async def _worker() -> list[dict[str, Any]]:
+            entries = await asyncio.to_thread(_fetch)
+            if on_result is not None:
+                with contextlib.suppress(Exception):
+                    on_result(entries)
+            return entries
+
+        self.run_worker(_worker, group="gcode_store")
+
     def send_gcode(
         self,
         command: str,

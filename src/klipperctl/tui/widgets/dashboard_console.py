@@ -30,12 +30,15 @@ from __future__ import annotations
 
 import contextlib
 from collections import deque
-from typing import ClassVar
+from typing import Any, ClassVar
 
+from textual import events
 from textual.app import ComposeResult
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Input, RichLog
+
+from klipperctl.output import format_timestamp
 
 #: Maximum number of recently submitted commands remembered for Up/Down recall.
 MAX_HISTORY = 50
@@ -57,9 +60,15 @@ def _normalize_command(raw: str) -> str:
 class DashboardConsoleWidget(Widget):
     """Compact embedded gcode console: log + input + history."""
 
+    # NOTE on height: Textual's `Input` has a native height of 3 (border
+    # top + content + border bottom). Do NOT override `#dash-gcode-input`
+    # with a smaller height — clamping to 1 row leaves zero rows for the
+    # content area and typed characters never render (regression from an
+    # earlier iteration). The outer widget is `height: 14`, leaving
+    # 11 rows for the RichLog after the 3-row Input.
     DEFAULT_CSS = """
     DashboardConsoleWidget {
-        height: 12;
+        height: 14;
         border: solid $primary;
         padding: 0 1;
     }
@@ -69,7 +78,6 @@ class DashboardConsoleWidget(Widget):
     }
     DashboardConsoleWidget #dash-gcode-input {
         dock: bottom;
-        height: 1;
     }
     """
 
@@ -86,11 +94,14 @@ class DashboardConsoleWidget(Widget):
 
     # Bindings scoped to this widget. Up/Down cycle history when the
     # input has focus; Textual routes the events to the widget because
-    # the Input is a child.
+    # the Input is a child. Escape is handled via `on_key` instead of
+    # a binding so we can both release focus *and* stop the event from
+    # bubbling up to the DashboardScreen's `("escape", "app.quit")`
+    # binding — using BINDINGS here would still let the screen's
+    # quit action fire.
     BINDINGS: ClassVar[list[tuple[str, str, str]]] = [
         ("up", "history_prev", "History prev"),
         ("down", "history_next", "History next"),
-        ("escape", "blur_input", "Blur"),
     ]
 
     def __init__(self, **kwargs: object) -> None:
@@ -98,6 +109,9 @@ class DashboardConsoleWidget(Widget):
         self._history: deque[str] = deque(maxlen=MAX_HISTORY)
         self._history_index: int | None = None
         self._pending_draft: str = ""
+        # Set by `on_mount` / `_request_backfill` to guard against
+        # re-fetching on remount.
+        self._backfill_requested: bool = False
 
     def compose(self) -> ComposeResult:
         yield RichLog(
@@ -111,7 +125,65 @@ class DashboardConsoleWidget(Widget):
         )
 
     def on_mount(self) -> None:
+        # Kick off the backfill worker first so it starts while we render
+        # the ready line. Entries are appended above the ready line by
+        # `_on_history_loaded`.
+        self._backfill_requested = False
+        self._request_backfill()
         self.append_info("Dashboard console ready. Type a gcode command.")
+
+    def _request_backfill(self) -> None:
+        """Ask the app for the last ~25 gcode store entries."""
+        if self._backfill_requested:
+            return
+        self._backfill_requested = True
+        app = self.app
+        fetch = getattr(app, "fetch_gcode_store", None)
+        if fetch is None:
+            return
+        # App may not be ready yet (tests can mount the widget
+        # directly); fail quietly — the ready line still renders.
+        with contextlib.suppress(Exception):
+            fetch(count=25, on_result=self._on_history_loaded)
+
+    def _on_history_loaded(self, entries: list[dict[str, Any]]) -> None:
+        """Callback from the backfill worker. Prepends entries to the log."""
+        if not entries:
+            return
+        # Render entries oldest-first, matching chronological order on
+        # screen. Moonraker returns them already in ascending time order.
+        for entry in entries:
+            self.append_history_entry(entry)
+        # Add a visual separator so the user sees where history ends and
+        # the live session begins.
+        self.append_info("--- end of recent history ---")
+
+    def on_key(self, event: events.Key) -> None:
+        """Handle escape while the gcode input has focus.
+
+        Using ``on_key`` (not ``BINDINGS``) lets us:
+
+        1. Scope the behavior to the case where the Input is actually
+           focused — escape from the dashboard proper should still
+           fall through to the screen's quit binding.
+        2. Call ``event.stop()`` + ``event.prevent_default()`` so the
+           event does *not* bubble up to the DashboardScreen, which
+           would otherwise trigger ``app.quit``.
+        """
+        if event.key != "escape":
+            return
+        try:
+            input_widget = self.query_one("#dash-gcode-input", Input)
+        except Exception:
+            return
+        if not input_widget.has_focus:
+            return
+        # Release focus back to the screen so the dashboard's single-key
+        # bindings (q, c, m, r, g) work again.
+        with contextlib.suppress(Exception):
+            self.screen.set_focus(None)
+        event.stop()
+        event.prevent_default()
 
     # ------------------------------------------------------------------ #
     # Public API used by DashboardScreen
@@ -135,6 +207,29 @@ class DashboardConsoleWidget(Widget):
     def append_info(self, text: str) -> None:
         """Render a dim informational line (not a command, not a reply)."""
         self._write(f"[dim]{text}[/dim]")
+
+    def append_history_entry(self, entry: dict[str, Any]) -> None:
+        """Render a single Moonraker gcode store entry as a prior-history line.
+
+        Entries come from ``server.gcodestore`` with the shape
+        ``{"time": float, "type": "command" | "response", "message": str}``.
+        Commands render in dim cyan (still identifiable as user-submitted
+        gcode), responses in plain dim. The timestamp prefix uses the
+        same formatter as ``klipperctl server logs`` for consistency.
+        """
+        msg = str(entry.get("message", ""))
+        if not msg:
+            return
+        ts_val = entry.get("time")
+        ts_str = format_timestamp(ts_val) if ts_val else ""
+        ts_prefix = f"[dim]{ts_str}[/dim] " if ts_str else ""
+        entry_type = entry.get("type", "response")
+        if entry_type == "command":
+            # Historical commands echo with the same > prefix as live
+            # ones, but in dim cyan so it's clear they aren't live.
+            self._write(f"{ts_prefix}[dim cyan]> {msg}[/dim cyan]")
+        else:
+            self._write(f"{ts_prefix}[dim]{msg}[/dim]")
 
     # ------------------------------------------------------------------ #
     # Input handling
@@ -195,15 +290,6 @@ class DashboardConsoleWidget(Widget):
             self._history_index += 1
             input_widget.value = self._history[self._history_index]
         input_widget.cursor_position = len(input_widget.value)
-
-    def action_blur_input(self) -> None:
-        """Drop input focus so the dashboard's global bindings fire again.
-
-        Pushing focus to the screen re-routes key events to the Screen's
-        BINDINGS when no specific widget holds focus.
-        """
-        with contextlib.suppress(Exception):
-            self.screen.focus(None)
 
     # ------------------------------------------------------------------ #
     # Internals

@@ -49,7 +49,7 @@ class DashboardScreen(Screen):
         padding: 0 1;
     }
     #dash-console {
-        height: 12;
+        height: 14;
     }
     """
 

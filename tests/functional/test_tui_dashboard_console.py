@@ -159,6 +159,48 @@ async def test_dashboard_console_m118_marker_roundtrip(
         assert observed, f"M118 marker {marker!r} never reached the gcode store"
 
 
+async def test_backfill_shows_recent_store_entries(
+    moonraker_url: str, printer_ready: bool
+) -> None:
+    """Dashboard console must prefill with recent gcode store on mount.
+
+    Seed the virtual printer's gcode store by sending a unique M118
+    marker via a direct library client *before* launching the TUI.
+    Then start the app and assert the marker appears in the console
+    log WITHOUT the user having to submit anything through the widget.
+    This exercises the full ``KlipperApp.fetch_gcode_store`` →
+    ``DashboardConsoleWidget._on_history_loaded`` →
+    ``append_history_entry`` path against the live printer.
+    """
+    from textual.widgets import RichLog
+
+    from klipperctl.tui.app import KlipperApp
+    from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+    from moonraker_client import MoonrakerClient
+    from moonraker_client.helpers import send_gcode
+
+    _ = printer_ready
+
+    marker = f"KLIPPERCTL_BACKFILL_{uuid.uuid4().hex[:10]}"
+    with MoonrakerClient(base_url=moonraker_url, timeout=15.0) as client:
+        send_gcode(client, f"M118 {marker}")
+
+    # Small delay so Moonraker's gcode store has a chance to record it.
+    await asyncio.sleep(0.5)
+
+    app = KlipperApp(printer_url=moonraker_url, poll_interval=1.0)
+    async with app.run_test(size=(140, 48)) as pilot:
+        # Wait for the backfill worker to complete.
+        await pilot.pause(delay=1.5)
+        widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+        log = widget.query_one("#console-log", RichLog)
+        rendered = "\n".join(str(line) for line in log.lines)
+        assert marker in rendered, (
+            f"backfilled marker {marker!r} not visible in console log; "
+            f"log was:\n{rendered}"
+        )
+
+
 async def test_dashboard_console_error_path(moonraker_url: str, printer_ready: bool) -> None:
     """A bogus command must be reported via the error-styled path."""
     from textual.widgets import Input
