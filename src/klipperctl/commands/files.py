@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import click
 from moonraker_client.exceptions import MoonrakerError
 from moonraker_client.helpers import list_gcode_files, upload_gcode
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TaskID,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 
 from klipperctl.cli import _handle_error
 from klipperctl.client import get_client
@@ -21,6 +32,44 @@ from klipperctl.output import (
     output_json,
     print_table,
 )
+
+
+@contextlib.contextmanager
+def _transfer_progress(
+    description: str, show: bool
+) -> Iterator[Callable[[int, int | None], None]]:
+    """Yield a progress callback suitable for ``files_upload``/``files_download``.
+
+    When ``show`` is False (JSON mode, non-interactive), yields a no-op
+    callback so the command still works unchanged. Otherwise renders a
+    Rich progress bar with a percentage, bytes-transferred, transfer
+    speed, and estimated-time-remaining column.
+    """
+    if not show:
+        yield lambda _done, _total: None
+        return
+
+    progress = Progress(
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        TextColumn("{task.percentage:>3.0f}%"),
+        console=console,
+        transient=False,
+    )
+    task_id: TaskID | None = None
+
+    def _callback(done: int, total: int | None) -> None:
+        nonlocal task_id
+        if task_id is None:
+            task_id = progress.add_task(description, total=total or 0)
+        # Rich's Progress wants `completed`, not a delta.
+        progress.update(task_id, completed=done, total=total or done or 0)
+
+    with progress:
+        yield _callback
 
 
 def _validate_remote_path(name: str) -> str:
@@ -125,12 +174,31 @@ def info(ctx: click.Context, filename: str) -> None:
 @click.argument("file", type=click.Path(exists=True))
 @click.option("--path", "remote_path", help="Remote subdirectory.")
 @click.option("--print", "start_print", is_flag=True, help="Start printing after upload.")
+@click.option(
+    "--no-progress",
+    is_flag=True,
+    help="Suppress the interactive progress bar.",
+)
 @click.pass_context
-def upload(ctx: click.Context, file: str, remote_path: str | None, start_print: bool) -> None:
+def upload(
+    ctx: click.Context,
+    file: str,
+    remote_path: str | None,
+    start_print: bool,
+    no_progress: bool,
+) -> None:
     """Upload a local gcode file."""
+    show_progress = not (no_progress or is_json_mode())
     try:
         client = get_client(ctx)
-        result = upload_gcode(client, file, remote_path=remote_path, start=start_print)
+        with _transfer_progress(f"Uploading {Path(file).name}", show=show_progress) as progress_cb:
+            result = upload_gcode(
+                client,
+                file,
+                remote_path=remote_path,
+                start=start_print,
+                progress=progress_cb,
+            )
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 
@@ -147,13 +215,28 @@ def upload(ctx: click.Context, file: str, remote_path: str | None, start_print: 
 @click.argument("filename")
 @click.option("--output", "output_path", type=click.Path(), help="Local output path.")
 @click.option("--root", default="gcodes", show_default=True, help="Root directory.")
+@click.option(
+    "--no-progress",
+    is_flag=True,
+    help="Suppress the interactive progress bar.",
+)
 @click.pass_context
-def download(ctx: click.Context, filename: str, output_path: str | None, root: str) -> None:
+def download(
+    ctx: click.Context,
+    filename: str,
+    output_path: str | None,
+    root: str,
+    no_progress: bool,
+) -> None:
     """Download a file from the printer."""
     _validate_remote_path(filename)
+    show_progress = not (no_progress or is_json_mode())
     try:
         client = get_client(ctx)
-        data = client.files_download(root, filename)
+        with _transfer_progress(
+            f"Downloading {Path(filename).name}", show=show_progress
+        ) as progress_cb:
+            data = client.files_download(root, filename, progress=progress_cb)
     except (MoonrakerError, click.Abort, OSError) as e:
         _handle_error(ctx, e)
 

@@ -169,9 +169,10 @@ Plan reference: `/Users/chris/.claude/plans/replicated-wandering-aurora.md`
 - [x] Add `_ensure_not_printing` pre-flight + firmware-restart fallback in `test_start_and_cancel_workflow`
   - Acceptance: workflow resilient to residual state from previous parametrizations; 3/3 modalities pass
   - commit: 1f059d1   pushed: yes
-- [ ] Progress callback on `files_upload`/download + Rich progress bar (deferred to later phase)
-  - Acceptance: test verifies callback fires; manual smoke shows progress bar
-  - commit: —   pushed: —
+- [x] Progress callback on `files_upload`/download + Rich progress bar (**landed as Phase 4b**)
+  - Acceptance: `_ProgressReader` class + streaming download path; callback fires with (0, total)/(total, total) monotonic ticks; Rich `Progress` bar with bar/bytes/speed/ETA renders in `klipperctl files upload|download` interactive mode; `--no-progress` and `--json` both suppress the bar while still exercising the callback plumbing; 8 new unit tests (sync + async upload/download + `_ProgressReader` direct tests) in moonraker-client; 5 new unit tests in klipperctl for callback plumbing + `--no-progress` flag; 3 new functional tests (`test_file_transfers.py`) exercising real upload/download against virtual printer including full CLI round trip
+  - Also fixed a pre-existing bug: `files_download` used to crash with `JSONDecodeError` on any binary body. Phase 4b bypasses `unwrap_response` via a new `_stream_download` path.
+  - commit: moonraker-client baac25d + klipperctl (pending)   pushed: —
 
 ---
 

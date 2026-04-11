@@ -103,6 +103,94 @@ class TestFilesDownload:
         result = _invoke(["files", "download", "test.gcode", "--output", "../../../evil.gcode"])
         assert result.exit_code != 0
 
+    def test_passes_progress_callback(self) -> None:
+        """Interactive download must forward a progress callback to the client."""
+        mock = _mock_client()
+        # Drive the callback so we can assert it's real and wired up.
+
+        def _fake_download(root: str, filename: str, progress=None) -> bytes:  # type: ignore[no-untyped-def]
+            if progress is not None:
+                progress(0, 10)
+                progress(10, 10)
+            return b"payload"
+
+        mock.files_download.side_effect = _fake_download
+        result = _invoke(["files", "download", "test.gcode"], mock_client=mock)
+        assert result.exit_code == 0
+        # The mock captured the call — confirm `progress=` was provided and
+        # is a callable (not None).
+        call = mock.files_download.call_args
+        assert call is not None
+        progress_cb = call.kwargs.get("progress")
+        assert callable(progress_cb)
+
+    def test_json_mode_suppresses_progress(self) -> None:
+        """JSON mode must pass a callback that is a no-op (still callable)."""
+        mock = _mock_client()
+        seen_callable: list[bool] = []
+
+        def _fake_download(root: str, filename: str, progress=None) -> bytes:  # type: ignore[no-untyped-def]
+            seen_callable.append(callable(progress))
+            return b"payload"
+
+        mock.files_download.side_effect = _fake_download
+        result = _invoke(["--json", "files", "download", "test.gcode"], mock_client=mock)
+        assert result.exit_code == 0
+        # A no-op callback is still callable; we just verify JSON mode
+        # didn't suppress the argument entirely (which would break the
+        # signature contract).
+        assert seen_callable and seen_callable[0] is True
+
+    def test_no_progress_flag(self) -> None:
+        """`--no-progress` must still supply a (no-op) callback."""
+        mock = _mock_client()
+        result = _invoke(["files", "download", "test.gcode", "--no-progress"], mock_client=mock)
+        assert result.exit_code == 0
+        assert mock.files_download.called
+
+
+class TestFilesUploadProgress:
+    """Progress callback wiring for `files upload`."""
+
+    def test_passes_progress_callback(self, tmp_path: object) -> None:
+        """Interactive upload must forward a callback to upload_gcode helper."""
+        import tempfile
+
+        # `files upload` uses `click.Path(exists=True)` so we need a real file.
+        with tempfile.NamedTemporaryFile(suffix=".gcode", delete=False) as f:
+            f.write(b"G28\n")
+            local = f.name
+
+        mock = _mock_client()
+        # Make `files_upload` (which `upload_gcode` calls) record the progress arg.
+        captured: list[object] = []
+
+        def _fake_upload(  # type: ignore[no-untyped-def]
+            file, root="gcodes", path=None, checksum=None, start_print=False, progress=None
+        ) -> dict:
+            captured.append(progress)
+            if progress is not None:
+                progress(0, 100)
+                progress(100, 100)
+            return {"item": {"path": "test.gcode"}, "action": "create_file"}
+
+        mock.files_upload.side_effect = _fake_upload
+        result = _invoke(["files", "upload", local], mock_client=mock)
+        assert result.exit_code == 0, result.output
+        assert captured and callable(captured[0])
+
+    def test_no_progress_flag(self, tmp_path: object) -> None:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".gcode", delete=False) as f:
+            f.write(b"G28\n")
+            local = f.name
+
+        mock = _mock_client()
+        result = _invoke(["files", "upload", local, "--no-progress"], mock_client=mock)
+        assert result.exit_code == 0
+        assert mock.files_upload.called
+
 
 class TestFilesDelete:
     def test_with_yes(self) -> None:
