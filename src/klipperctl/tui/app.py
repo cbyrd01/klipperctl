@@ -177,14 +177,15 @@ class KlipperApp(App):
         """Push data to the dashboard screen."""
         from klipperctl.tui.screens.dashboard import DashboardScreen
 
+        # Only update when the dashboard is the currently active screen.
+        # Updating widgets on a screen that's been covered by a modal
+        # causes Textual's incremental renderer to paint widget updates
+        # over the modal in real terminals, leaving visible artifacts on
+        # the right side of the modal (where the dashboard's
+        # PrinterStatusWidget / temperature charts sit).
         screen = self.screen
         if not isinstance(screen, DashboardScreen):
-            for s in self.screen_stack:
-                if isinstance(s, DashboardScreen):
-                    screen = s
-                    break
-            else:
-                return
+            return
 
         screen.update_status(data)
 

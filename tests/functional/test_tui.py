@@ -94,6 +94,58 @@ class TestTuiDashboard:
             assert isinstance(app.screen, ServerCommandScreen)
 
     @pytest.mark.asyncio
+    async def test_modal_blocks_dashboard_widget_updates(self) -> None:
+        """Against a live Moonraker, a modal on top of the dashboard must
+        freeze the dashboard's widget state until dismissed.
+
+        This is the regression test for the right-side paint-artifact
+        bug on modal dialogs: polling worker updates that fire while a
+        modal is active were writing directly to dashboard widgets,
+        causing Textual's incremental renderer to repaint them on top
+        of the modal. The fix gates ``_update_dashboard`` on the
+        dashboard being the active screen, so the widget state must be
+        invariant while the modal is up.
+        """
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.screens.commands import ResultModal
+        from klipperctl.tui.screens.dashboard import DashboardScreen
+        from klipperctl.tui.widgets.status import PrinterStatusWidget
+
+        app = KlipperApp(printer_url=MOONRAKER_URL, poll_interval=0.5)
+        async with app.run_test(size=(160, 40)) as pilot:
+            # Let at least one poll populate the dashboard with real data.
+            await pilot.pause(delay=3.0)
+            assert isinstance(app.screen, DashboardScreen)
+            status = app.screen.query_one("#printer-status", PrinterStatusWidget)
+            seeded_state = status.printer_state
+            assert seeded_state != "unknown"
+
+            app.push_screen(ResultModal("live-test", "modal body"))
+            await pilot.pause()
+            assert isinstance(app.screen, ResultModal)
+
+            # Force the widget reactive to a sentinel value. The poll
+            # worker keeps firing every 0.5s against the live server;
+            # if the gate is broken, the next poll overwrites this.
+            sentinel = "__modal_sentinel__"
+            status.printer_state = sentinel
+
+            # Wait long enough for several poll cycles to fire against
+            # the live server — plenty of chances to clobber the state
+            # if the fix regresses.
+            await pilot.pause(delay=3.0)
+            assert status.printer_state == sentinel, (
+                "Dashboard widget was updated while a modal was active — "
+                "this causes the right-side paint artifact on modal dialogs"
+            )
+
+            app.pop_screen()
+            await pilot.pause(delay=2.0)
+            # Once the dashboard is active again, polling should
+            # overwrite the sentinel with a real state.
+            assert status.printer_state != sentinel
+
+    @pytest.mark.asyncio
     async def test_tui_cli_entry(self) -> None:
         """Test the `klipperctl tui` CLI entry point resolves connection."""
         from click.testing import CliRunner

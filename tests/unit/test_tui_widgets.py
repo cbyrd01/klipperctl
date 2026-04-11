@@ -1087,6 +1087,95 @@ class TestDashboardConsoleLiveTail:
         w.append_live_entry({"type": "command", "message": ""})
         assert captured == []
 
+    @pytest.mark.asyncio
+    async def test_tail_holds_watermark_when_modal_is_active(self) -> None:
+        """Tail must not render (or advance the watermark) when a modal is on top.
+
+        Writing to the RichLog on a covered dashboard causes Textual's
+        incremental renderer to paint over the modal in real terminals,
+        producing visible artifacts on the right side of modal dialogs
+        (the same visible bug as
+        ``TestKlipperAppUpdateDashboard.test_update_dashboard_skipped_when_modal_active``
+        but for the live-tail path). Holding the watermark guarantees
+        the entries are re-rendered the next time the tail fires after
+        the modal closes, so no data is lost.
+        """
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.screens.commands import ResultModal
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(160, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.3)
+                log = widget.query_one("#console-log", RichLog)
+                baseline = len(log.lines)
+                watermark_before = widget._last_time
+
+                app.push_screen(ResultModal("Test", "content"))
+                await pilot.pause()
+                assert isinstance(app.screen, ResultModal)
+
+                widget._on_tail_entries([{"time": 9999.0, "type": "command", "message": "HIDDEN"}])
+                await pilot.pause()
+                assert len(log.lines) == baseline
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "HIDDEN" not in rendered
+                assert widget._last_time == watermark_before
+
+                app.pop_screen()
+                await pilot.pause()
+                widget._on_tail_entries([{"time": 9999.0, "type": "command", "message": "HIDDEN"}])
+                await pilot.pause()
+                rendered_after = "\n".join(str(line) for line in log.lines)
+                assert "HIDDEN" in rendered_after
+                assert widget._last_time == 9999.0
+
+    @pytest.mark.asyncio
+    async def test_write_drops_when_modal_covers_dashboard(self) -> None:
+        """_write is the last line of defense — any path writing to the
+        dashboard console while a modal is on top should be silently
+        dropped so the modal stays free of paint artifacts."""
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.screens.commands import ResultModal
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.server_gcodestore.return_value = {"gcode_store": []}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(160, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                await pilot.pause(delay=0.3)
+                log = widget.query_one("#console-log", RichLog)
+
+                app.push_screen(ResultModal("Test", "content"))
+                await pilot.pause()
+                baseline = len(log.lines)
+
+                widget.append_info("should-be-dropped")
+                widget.append_command("G28")
+                widget.append_result("ok")
+                await pilot.pause()
+
+                assert len(log.lines) == baseline
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "should-be-dropped" not in rendered
+                assert "G28" not in rendered
+
 
 class TestFetchGcodeStore:
     """Unit tests for KlipperApp.fetch_gcode_store (backfill helper)."""

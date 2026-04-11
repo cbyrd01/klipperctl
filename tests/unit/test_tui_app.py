@@ -108,6 +108,79 @@ class TestKlipperAppUpdateDashboard:
                 # Empty data should not crash
                 app._update_dashboard({})
 
+    @pytest.mark.asyncio
+    async def test_update_dashboard_skipped_when_modal_active(self) -> None:
+        """Polling updates must not leak through to dashboard widgets when a
+        modal screen is on top.
+
+        Writing to a lower-screen widget triggers Textual's incremental
+        renderer to paint the widget on top of the modal in real
+        terminals, producing visible artifacts on the right side of
+        modal dialogs. The fix gates ``_update_dashboard`` on the
+        dashboard actually being the active screen; this test locks in
+        that gate.
+        """
+        from klipperctl.tui.screens.commands import ResultModal
+        from klipperctl.tui.widgets.status import PrinterStatusWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(160, 40)) as pilot:
+                # Seed the dashboard with a known state.
+                initial = {
+                    "extruder": {"temperature": 25.0, "target": 0.0},
+                    "heater_bed": {"temperature": 25.0, "target": 0.0},
+                    "print_stats": {
+                        "state": "ready",
+                        "filename": "",
+                        "print_duration": 0.0,
+                        "message": "",
+                    },
+                    "virtual_sdcard": {"progress": 0.0},
+                }
+                app._update_dashboard(initial)
+                await pilot.pause()
+                dashboard = app.screen
+                widget = dashboard.query_one("#printer-status", PrinterStatusWidget)
+                assert widget.printer_state == "ready"
+
+                # Push a modal and then attempt to push new data. The
+                # dashboard widget state must remain unchanged so no
+                # refresh is emitted on the covered screen.
+                app.push_screen(ResultModal("Test", "content"))
+                await pilot.pause()
+                assert isinstance(app.screen, ResultModal)
+
+                updated = {
+                    "extruder": {"temperature": 210.0, "target": 210.0},
+                    "heater_bed": {"temperature": 60.0, "target": 60.0},
+                    "print_stats": {
+                        "state": "printing",
+                        "filename": "job.gcode",
+                        "print_duration": 1800.0,
+                        "message": "",
+                    },
+                    "virtual_sdcard": {"progress": 0.5},
+                }
+                app._update_dashboard(updated)
+                await pilot.pause()
+                # Widget on the covered dashboard must still hold the
+                # pre-modal state — the update was dropped.
+                assert widget.printer_state == "ready"
+                assert widget.filename == ""
+
+                # Return to the dashboard; the next update should now apply.
+                app.pop_screen()
+                await pilot.pause()
+                app._update_dashboard(updated)
+                await pilot.pause()
+                assert widget.printer_state == "printing"
+                assert widget.filename == "job.gcode"
+
 
 class TestKlipperAppMounted:
     @pytest.mark.asyncio

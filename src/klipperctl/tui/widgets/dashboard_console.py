@@ -227,8 +227,15 @@ class DashboardConsoleWidget(Widget):
         after ``asyncio.to_thread`` resumes). Filters by the watermark
         and by the local-echo dedupe heuristic, then advances the
         watermark.
+
+        Defers rendering entirely when the dashboard is not the active
+        screen (i.e. a modal is on top). Both the watermark and the
+        render are held — the next poll after the modal closes will
+        pick up the accumulated entries without data loss.
         """
         if not entries:
+            return
+        if not self._widget_is_visible():
             return
         newest = self._last_time
         for entry in entries:
@@ -496,12 +503,42 @@ class DashboardConsoleWidget(Widget):
     # ------------------------------------------------------------------ #
 
     def _write(self, markup: str) -> None:
-        """Write a single line to the RichLog, tolerating early calls."""
+        """Write a single line to the RichLog, tolerating early calls.
+
+        Drops the write when the widget's screen is not the active
+        screen — see :meth:`_widget_is_visible` for the rationale. The
+        live-tail poll loop is the primary background writer and is
+        also gated upstream so the watermark doesn't advance while
+        hidden; this guard catches any other path (e.g. a
+        ``send_gcode`` reply that arrives after the user navigates
+        away) and keeps modal dialogs free of paint artifacts.
+        """
+        if not self._widget_is_visible():
+            return
         try:
             log = self.query_one("#console-log", RichLog)
         except Exception:
             return
         log.write(markup)
+
+    def _widget_is_visible(self) -> bool:
+        """True when this widget's screen is the currently active screen.
+
+        Used as a gate for background render operations (live-tail
+        polling): writing to a ``RichLog`` on a screen that has been
+        covered by a modal causes Textual's incremental renderer to
+        paint the update on top of the modal in real terminals, leaving
+        visible artifacts. Headless ``run_test`` composites the final
+        state so the issue only shows up in live sessions.
+        """
+        try:
+            app = self.app
+        except Exception:
+            return True
+        try:
+            return self.screen is app.screen
+        except Exception:
+            return True
 
     def focus_input(self) -> None:
         """Move keyboard focus to the gcode input.
