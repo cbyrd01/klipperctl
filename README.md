@@ -262,7 +262,13 @@ klipperctl tui --printer myprinter      # use a named profile
 ```
 
 The TUI provides:
-- **Dashboard**: Real-time printer status, progress bar, temperature readings with sparkline trends
+- **Dashboard**: Real-time printer status, progress bar, and a per-heater
+  temperature chart. Each chart (hotend, bed) draws the recent
+  current-temperature history as a block-character line, overlaid
+  with a horizontal magenta reference line at the target setpoint, so
+  you can see at a glance how close the printer is to the requested
+  temperature. The chart header reports current, target, and the
+  autoscaled Y-axis range.
 - **Console**: Interactive GCode console for sending commands
 - **Command Menu**: Nested menus exposing all 11 command groups with smart selection lists (files, devices, services, components), input forms, and confirmation dialogs
 

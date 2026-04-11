@@ -66,7 +66,8 @@ mypy src/klipperctl/
   - `screens/console.py` — GCode console with WebSocket streaming
   - `screens/commands.py` — Nested command menus for all 11 command groups, confirmation/input/result modals
   - `widgets/status.py` — `PrinterStatusWidget` (state, progress bar, elapsed, ETA)
-  - `widgets/temperatures.py` — `TemperatureWidget` (heater readings + sparkline history)
+  - `widgets/temperatures.py` — `TemperatureWidget` container that composes one `HeaterChart` per pinned heater (extruder, heater_bed) plus a text row for extra sensors without targets
+  - `widgets/heater_chart.py` — `HeaterChart` widget + pure helpers (`_compute_bounds`, `_temp_to_row`, `_render_heater_chart`) that render a per-heater chart with the current-temperature history as block characters and a horizontal magenta reference line at the target setpoint. Y-axis autoscales to always include the target.
 
 ### Key Patterns
 
@@ -108,14 +109,19 @@ mypy src/klipperctl/
   - `test_commands_phase2.py` — Files extended, history, queue
   - `test_commands_phase3.py` — Server, system, update, power
   - `test_commands_phase4.py` — Auth, config
-  - `test_tui_widgets.py` — TUI widget unit tests (friendly names, reactive values, history)
+  - `test_tui_widgets.py` — TUI widget unit tests (friendly names, reactive values, HeaterChart helpers + rendering, TemperatureWidget chart composition)
   - `test_tui_app.py` — TUI app lifecycle, navigation, dashboard updates
   - `test_tui_screens.py` — TUI screen rendering, modals, forms
   - `test_tui_command_screens.py` — All 11 command group screens, navigation, set-temp args
   - `test_tui_cmd.py` — `klipperctl tui` CLI entry point, connection resolution
 - `tests/functional/` — Tests against a live Moonraker server
   - Skipped without `MOONRAKER_URL` env var + `--functional` flag
+  - `conftest.py` + `_harness.py` — preflight fixtures (`printer_ready` with firmware-restart recovery) and tri-modality runners (`LibraryRunner`, `CliModalityRunner`, `TuiRunner`)
   - `test_printer.py` — Core commands against live printer
   - `test_all_commands.py` — History, queue, server, system, files
   - `test_tui.py` — TUI dashboard, navigation, command execution against live server
+  - `test_harness.py` — smoke tests that exercise the tri-modality `workflow_runner` fixture
+  - `test_workflows.py` — multi-step workflows (heat-and-verify, start-and-cancel, gcode-log roundtrip) parametrized across all three modalities
+  - `test_file_transfers.py` — upload/download with progress callback, CLI round-trip
+  - `test_tui_heater_chart.py` — per-heater chart widget against live poll data
 - Test pattern: mock `build_client` to inject a MagicMock for unit tests; use CliRunner for both unit and functional tests. TUI tests use Textual's `app.run_test()` with `pilot` for headless interaction.
