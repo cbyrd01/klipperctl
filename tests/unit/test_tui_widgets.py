@@ -358,3 +358,255 @@ class TestHeaterChartWidget:
             chart._history.append(float(i))  # direct append to avoid refresh()
         assert len(chart.history) == 5
         assert chart.history == [5.0, 6.0, 7.0, 8.0, 9.0]
+
+
+class TestNormalizeCommand:
+    """Pure-function tests for _normalize_command."""
+
+    def test_trims_surrounding_whitespace(self) -> None:
+        from klipperctl.tui.widgets.dashboard_console import _normalize_command
+
+        assert _normalize_command("  G28  \n") == "G28"
+
+    def test_empty_input_returns_empty(self) -> None:
+        from klipperctl.tui.widgets.dashboard_console import _normalize_command
+
+        assert _normalize_command("") == ""
+        assert _normalize_command("   ") == ""
+        assert _normalize_command("\t\n") == ""
+
+    def test_preserves_internal_spacing(self) -> None:
+        from klipperctl.tui.widgets.dashboard_console import _normalize_command
+
+        assert _normalize_command("M117 hello world") == "M117 hello world"
+
+    def test_none_is_empty(self) -> None:
+        from klipperctl.tui.widgets.dashboard_console import _normalize_command
+
+        # Defensive: the widget shouldn't pass None, but the helper
+        # handles it cleanly rather than crashing.
+        assert _normalize_command(None) == ""  # type: ignore[arg-type]
+
+
+class TestDashboardConsoleWidget:
+    """Tests for the embedded dashboard gcode console widget."""
+
+    @pytest.mark.asyncio
+    async def test_mounts_on_dashboard(self) -> None:
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as _pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                assert widget is not None
+
+    @pytest.mark.asyncio
+    async def test_submit_echoes_and_posts_message(self) -> None:
+        """Enter on a non-empty line must echo + post Submitted."""
+        from textual.widgets import Input, RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.gcode_script.return_value = "ok"
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                input_widget.value = "G28"
+                # Programmatically submit by posting the Input.Submitted event.
+                widget.on_input_submitted(Input.Submitted(input_widget, "G28"))
+                # Give the event loop a tick to process posted messages.
+                await pilot.pause(delay=0.2)
+
+                # Echo should be present in the RichLog.
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "G28" in rendered
+
+                # History should contain the command.
+                assert widget.history == ["G28"]
+
+    @pytest.mark.asyncio
+    async def test_empty_submit_is_ignored(self) -> None:
+        """Whitespace-only submission must not post or record history."""
+        from textual.widgets import Input
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as _pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                widget.on_input_submitted(Input.Submitted(input_widget, "   "))
+                assert widget.history == []
+
+    @pytest.mark.asyncio
+    async def test_append_result_renders_success_and_error(self) -> None:
+        """append_result must write success and error lines to the log."""
+        from textual.widgets import RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as _pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                widget.append_result("FIRMWARE_NAME: Klipper v0.12", is_error=False)
+                widget.append_result("Unknown command", is_error=True)
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "FIRMWARE_NAME" in rendered
+                assert "Unknown command" in rendered
+
+    @pytest.mark.asyncio
+    async def test_history_cycles_with_up_down(self) -> None:
+        """Up walks back through history; Down walks forward and restores draft."""
+        from textual.widgets import Input
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as _pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                # Seed history directly without going through the event path.
+                widget._history.extend(["G28", "M115", "M117 hi"])
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                # User types a draft they haven't submitted yet.
+                input_widget.value = "draft-in-progress"
+                # First Up jumps to most recent history entry, remembering
+                # the draft.
+                widget.action_history_prev()
+                assert input_widget.value == "M117 hi"
+                # Another Up: one step older.
+                widget.action_history_prev()
+                assert input_widget.value == "M115"
+                # And another.
+                widget.action_history_prev()
+                assert input_widget.value == "G28"
+                # Clamp at oldest — another Up stays put.
+                widget.action_history_prev()
+                assert input_widget.value == "G28"
+                # Now Down: M115
+                widget.action_history_next()
+                assert input_widget.value == "M115"
+                # Down: M117 hi
+                widget.action_history_next()
+                assert input_widget.value == "M117 hi"
+                # Down past the newest: restores the draft.
+                widget.action_history_next()
+                assert input_widget.value == "draft-in-progress"
+
+    @pytest.mark.asyncio
+    async def test_consecutive_duplicates_collapsed(self) -> None:
+        """Submitting the same command twice should not record it twice."""
+        from textual.widgets import Input
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as _pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                widget.on_input_submitted(Input.Submitted(input_widget, "G28"))
+                widget.on_input_submitted(Input.Submitted(input_widget, "G28"))
+                widget.on_input_submitted(Input.Submitted(input_widget, "M115"))
+                widget.on_input_submitted(Input.Submitted(input_widget, "G28"))
+                # Adjacent duplicates collapse; non-adjacent repeats do not.
+                assert widget.history == ["G28", "M115", "G28"]
+
+    @pytest.mark.asyncio
+    async def test_dashboard_forwards_submission_to_app(self) -> None:
+        """DashboardScreen must wire Submitted → app.send_gcode with callback."""
+        from textual.widgets import Input, RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.gcode_script.return_value = "ok"
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                input_widget.value = "G28"
+                widget.on_input_submitted(Input.Submitted(input_widget, "G28"))
+                # The worker dispatches on_result back into the widget.
+                # Give the event loop time for the worker + callback.
+                await pilot.pause(delay=0.5)
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                # Echo of the command.
+                assert "G28" in rendered
+                # Result from the mocked printer — the green success text.
+                assert "ok" in rendered
+                # mock_client.gcode_script should have been called with
+                # the exact command.
+                mock_client.gcode_script.assert_called_with("G28")
+
+    @pytest.mark.asyncio
+    async def test_error_result_rendered_as_error(self) -> None:
+        """A MoonrakerError from the worker must show as an error line."""
+        from moonraker_client.exceptions import MoonrakerAPIError
+        from textual.widgets import Input, RichLog
+
+        from klipperctl.tui.app import KlipperApp
+        from klipperctl.tui.widgets.dashboard_console import DashboardConsoleWidget
+
+        app = KlipperApp(printer_url="http://test:7125")
+        with patch.object(app, "_build_sync_client") as mock_build:
+            mock_client = MagicMock()
+            mock_client.printer_objects_query.return_value = {"status": {}}
+            mock_client.gcode_script.side_effect = MoonrakerAPIError(
+                "Unknown command: NOT_A_COMMAND", status_code=400
+            )
+            mock_client.close.return_value = None
+            mock_build.return_value = mock_client
+            async with app.run_test(size=(140, 48)) as pilot:
+                widget = app.screen.query_one("#dash-console", DashboardConsoleWidget)
+                input_widget = widget.query_one("#dash-gcode-input", Input)
+                input_widget.value = "NOT_A_COMMAND"
+                widget.on_input_submitted(Input.Submitted(input_widget, "NOT_A_COMMAND"))
+                await pilot.pause(delay=0.5)
+                log = widget.query_one("#console-log", RichLog)
+                rendered = "\n".join(str(line) for line in log.lines)
+                assert "NOT_A_COMMAND" in rendered
+                assert "Unknown command" in rendered

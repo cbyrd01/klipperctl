@@ -197,24 +197,46 @@ class KlipperApp(App):
         if heaters:
             screen.update_temperatures(heaters)
 
-    def send_gcode(self, command: str) -> None:
-        """Send a GCode command via the sync client."""
+    def send_gcode(
+        self,
+        command: str,
+        on_result: Any = None,
+    ) -> None:
+        """Send a GCode command via the sync client.
 
-        def _send() -> str:
+        Args:
+            command: The gcode script to send (e.g. ``"G28"``).
+            on_result: Optional callback ``(text: str, is_error: bool) -> None``
+                invoked on the Textual main thread when the worker
+                completes. If omitted, the result is discarded
+                (preserving the old fire-and-forget behavior).
+        """
+
+        def _send() -> tuple[str, bool]:
             try:
                 client = self._build_sync_client()
                 try:
                     result = client.gcode_script(command)
-                    return str(result) if result else "ok"
+                    text = str(result) if result else "ok"
+                    return text, False
                 finally:
                     client.close()
             except Exception as exc:
-                return f"Error: {exc}"
+                return f"{exc}", True
 
         import asyncio
 
-        async def _worker() -> str:
-            return await asyncio.to_thread(_send)
+        async def _worker() -> tuple[str, bool]:
+            import contextlib
+
+            text, is_error = await asyncio.to_thread(_send)
+            if on_result is not None:
+                # `asyncio.to_thread` resumes us on the event loop thread,
+                # so a direct call is safe. A broken callback must not
+                # poison the worker, hence the suppression.
+                with contextlib.suppress(Exception):
+                    on_result(text, is_error)
+            return text, is_error
 
         self.run_worker(_worker, group="gcode")
 

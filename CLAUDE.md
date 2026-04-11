@@ -68,6 +68,7 @@ mypy src/klipperctl/
   - `widgets/status.py` — `PrinterStatusWidget` (state, progress bar, elapsed, ETA)
   - `widgets/temperatures.py` — `TemperatureWidget` container that composes one `HeaterChart` per pinned heater (extruder, heater_bed) plus a text row for extra sensors without targets
   - `widgets/heater_chart.py` — `HeaterChart` widget + pure helpers (`_compute_bounds`, `_temp_to_row`, `_render_heater_chart`) that render a per-heater chart with the current-temperature history as block characters and a horizontal magenta reference line at the target setpoint. Y-axis autoscales to always include the target.
+  - `widgets/dashboard_console.py` — `DashboardConsoleWidget` embedded in the dashboard for quick gcode entry. Composes a `RichLog` + `Input`, maintains a 50-command history deque cycled via Up/Down, posts a `DashboardConsoleWidget.Submitted` message on Enter, and receives replies via a callback path from `KlipperApp.send_gcode(on_result=...)`. Escape blurs the input so the dashboard's single-key bindings fire again.
 
 ### Key Patterns
 
@@ -124,4 +125,5 @@ mypy src/klipperctl/
   - `test_workflows.py` — multi-step workflows (heat-and-verify, start-and-cancel, gcode-log roundtrip) parametrized across all three modalities
   - `test_file_transfers.py` — upload/download with progress callback, CLI round-trip
   - `test_tui_heater_chart.py` — per-heater chart widget against live poll data
+  - `test_tui_dashboard_console.py` — embedded dashboard gcode console round-trip against live Moonraker (safe M115 query, M118 marker verified via gcode store, error-path via `G1 X1000000` unhomed motion)
 - Test pattern: mock `build_client` to inject a MagicMock for unit tests; use CliRunner for both unit and functional tests. TUI tests use Textual's `app.run_test()` with `pilot` for headless interaction.

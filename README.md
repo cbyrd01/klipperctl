@@ -262,17 +262,24 @@ klipperctl tui --printer myprinter      # use a named profile
 ```
 
 The TUI provides:
-- **Dashboard**: Real-time printer status, progress bar, and a per-heater
-  temperature chart. Each chart (hotend, bed) draws the recent
-  current-temperature history as a block-character line, overlaid
-  with a horizontal magenta reference line at the target setpoint, so
-  you can see at a glance how close the printer is to the requested
-  temperature. The chart header reports current, target, and the
-  autoscaled Y-axis range.
-- **Console**: Interactive GCode console for sending commands
+- **Dashboard**: Real-time printer status, progress bar, per-heater
+  temperature charts, and an embedded gcode console. Each chart
+  (hotend, bed) draws the recent current-temperature history as a
+  block-character line, overlaid with a horizontal magenta reference
+  line at the target setpoint, so you can see at a glance how close
+  the printer is to the requested temperature. The embedded console
+  at the bottom lets you fire off quick commands (`G28`, `M115`,
+  `M117 hello`) without leaving the dashboard: press `g` to focus
+  the input, type a command, press Enter. Up/Down recalls the last
+  50 commands. Escape blurs the input so the single-key dashboard
+  bindings work again. Replies render green (success) or red
+  (error) in a scrolling log above the input.
+- **Console**: Full-screen GCode console with WebSocket streaming,
+  for when you want to tail responses or send a long session of
+  commands.
 - **Command Menu**: Nested menus exposing all 11 command groups with smart selection lists (files, devices, services, components), input forms, and confirmation dialogs
 
-Keyboard shortcuts: `d` Dashboard, `c` Console, `m` Commands, `r` Refresh, `q`/`Escape` Quit (dashboard), `Escape` Back (elsewhere).
+Keyboard shortcuts: `d` Dashboard, `c` Full Console, `m` Commands, `g` focus embedded gcode input, `r` Refresh, `q`/`Escape` Quit (dashboard), `Escape` Back / blur input (elsewhere). Inside the dashboard gcode input, Up/Down cycles history and Escape releases focus back to the dashboard.
 
 See [docs/TUI.md](docs/TUI.md) for the full TUI guide.
 
