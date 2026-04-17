@@ -15,21 +15,16 @@ Command line interface for 3D printers using [Moonraker](https://moonraker.readt
 
 ## Installation
 
-> `klipperctl` and its sibling library `moonraker-client` are not yet published
-> to PyPI. Install `moonraker-client` first, then `klipperctl`.
-
-Install from git:
+Install from PyPI:
 
 ```bash
-pip install "git+https://github.com/cbyrd01/moonraker-client.git"
-pip install "git+https://github.com/cbyrd01/klipperctl.git"
+pip install klipperctl
 ```
 
 With TUI support (interactive terminal dashboard):
 
 ```bash
-pip install "git+https://github.com/cbyrd01/moonraker-client.git"
-pip install "klipperctl[tui] @ git+https://github.com/cbyrd01/klipperctl.git"
+pip install "klipperctl[tui]"
 ```
 
 For development (sibling-checkout layout):
@@ -39,11 +34,11 @@ git clone https://github.com/cbyrd01/moonraker-client.git
 git clone https://github.com/cbyrd01/klipperctl.git
 cd klipperctl
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e "../moonraker-client"          # install the sibling library first
+pip install -e "../moonraker-client"          # editable sibling for local changes
 pip install -e ".[dev,tui]"                   # editable install of klipperctl
 ```
 
-The editable `moonraker-client` install shadows the pinned git reference in
+The editable `moonraker-client` install shadows the PyPI dependency declared in
 `pyproject.toml`, so local changes to either repo are picked up immediately.
 
 Build local wheels for smoke testing (no PyPI upload):
