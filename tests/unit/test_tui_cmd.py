@@ -6,6 +6,7 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from klipperctl.cli import cli
@@ -39,6 +40,7 @@ class TestTuiCommand:
         assert "--printer" in result.output
 
     def test_tui_resolves_config_printer(self) -> None:
+        pytest.importorskip("textual")
         runner = CliRunner()
         mock_config = {
             "default_printer": "myprinter",
@@ -49,10 +51,9 @@ class TestTuiCommand:
                 },
             },
         }
-        with (
-            patch("klipperctl.commands.tui_cmd.load_config", return_value=mock_config),
-            patch("klipperctl.tui.app.KlipperApp") as mock_app_cls,
-        ):
+        with patch("klipperctl.commands.tui_cmd.load_config", return_value=mock_config), patch(
+            "klipperctl.tui.app.KlipperApp"
+        ) as mock_app_cls:
             mock_app = MagicMock()
             mock_app_cls.return_value = mock_app
             runner.invoke(cli, ["tui", "--printer", "myprinter"])
@@ -64,11 +65,11 @@ class TestTuiCommand:
             mock_app.run.assert_called_once()
 
     def test_tui_uses_global_url(self) -> None:
+        pytest.importorskip("textual")
         runner = CliRunner()
-        with (
-            patch("klipperctl.commands.tui_cmd.load_config", return_value={}),
-            patch("klipperctl.tui.app.KlipperApp") as mock_app_cls,
-        ):
+        with patch("klipperctl.commands.tui_cmd.load_config", return_value={}), patch(
+            "klipperctl.tui.app.KlipperApp"
+        ) as mock_app_cls:
             mock_app = MagicMock()
             mock_app_cls.return_value = mock_app
             runner.invoke(cli, ["--url", "http://flag:7125", "tui"])
@@ -77,12 +78,11 @@ class TestTuiCommand:
             assert call_kwargs["printer_url"] == "http://flag:7125"
 
     def test_tui_uses_env_url(self) -> None:
+        pytest.importorskip("textual")
         runner = CliRunner()
-        with (
-            patch("klipperctl.commands.tui_cmd.load_config", return_value={}),
-            patch("klipperctl.tui.app.KlipperApp") as mock_app_cls,
-            patch.dict("os.environ", {"MOONRAKER_URL": "http://env:7125"}),
-        ):
+        with patch("klipperctl.commands.tui_cmd.load_config", return_value={}), patch(
+            "klipperctl.tui.app.KlipperApp"
+        ) as mock_app_cls, patch.dict("os.environ", {"MOONRAKER_URL": "http://env:7125"}):
             mock_app = MagicMock()
             mock_app_cls.return_value = mock_app
             runner.invoke(cli, ["tui"])
@@ -90,15 +90,14 @@ class TestTuiCommand:
             assert call_kwargs["printer_url"] == "http://env:7125"
 
     def test_tui_default_url(self) -> None:
+        pytest.importorskip("textual")
         runner = CliRunner()
         env = os.environ.copy()
         env.pop("MOONRAKER_URL", None)
         env.pop("MOONRAKER_API_KEY", None)
-        with (
-            patch("klipperctl.commands.tui_cmd.load_config", return_value={}),
-            patch("klipperctl.tui.app.KlipperApp") as mock_app_cls,
-            patch.dict("os.environ", env, clear=True),
-        ):
+        with patch("klipperctl.commands.tui_cmd.load_config", return_value={}), patch(
+            "klipperctl.tui.app.KlipperApp"
+        ) as mock_app_cls, patch.dict("os.environ", env, clear=True):
             mock_app = MagicMock()
             mock_app_cls.return_value = mock_app
             runner.invoke(cli, ["tui"])

@@ -22,6 +22,8 @@ import uuid
 
 import pytest
 
+pytest.importorskip("textual")
+
 pytestmark = [pytest.mark.functional, pytest.mark.asyncio]
 
 

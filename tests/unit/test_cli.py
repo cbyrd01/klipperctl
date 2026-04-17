@@ -23,10 +23,12 @@ class TestCLI:
         assert "klipperctl" in result.output.lower() or "Command line" in result.output
 
     def test_version(self) -> None:
+        from klipperctl import __version__
+
         runner = CliRunner()
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.1.0" in result.output
+        assert __version__ in result.output
 
     def test_printer_group_help(self) -> None:
         runner = CliRunner()
@@ -139,7 +141,11 @@ class TestErrorHandling:
         with patch("klipperctl.client.build_client", return_value=client):
             result = runner.invoke(cli, ["print", "start", "missing.gcode"])
         assert result.exit_code == 3
-        assert "missing.gcode" in (result.stderr + result.output)
+        # click 8.1 (Python 3.8 floor) merges stderr into output by default
+        # and raises on result.stderr access; click 8.2+ separates them.
+        stderr_bytes = getattr(result, "stderr_bytes", None) or b""
+        combined = result.output + stderr_bytes.decode("utf-8", errors="replace")
+        assert "missing.gcode" in combined
 
     def test_stray_file_not_found_is_not_user_input(self) -> None:
         """A FileNotFoundError from an unrelated path is *not* mapped to exit 3.

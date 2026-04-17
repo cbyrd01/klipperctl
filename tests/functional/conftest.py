@@ -174,6 +174,7 @@ async def workflow_runner(
     elif modality == "cli":
         yield CliModalityRunner(moonraker_url)
     elif modality == "tui":
+        pytest.importorskip("textual")
         from klipperctl.tui.app import KlipperApp
 
         app = KlipperApp(printer_url=moonraker_url, poll_interval=1.0)
