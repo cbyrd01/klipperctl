@@ -128,3 +128,48 @@ mypy src/klipperctl/
   - `test_tui_dashboard_console.py` — embedded dashboard gcode console round-trip against live Moonraker (safe M115 query, M118 marker verified via gcode store, error-path via `G1 X1000000` unhomed motion, backfill prefill, live streaming from a separate client, no-double-echo dedupe under live race)
   - `test_tui_full_console.py` — full ConsoleScreen against live Moonraker: backfill prefill (also pins the `[dim]` literal-markup regression fix), live streaming from a separate client, submit-renders-reply, single-press Escape pops the screen back to the dashboard
 - Test pattern: mock `build_client` to inject a MagicMock for unit tests; use CliRunner for both unit and functional tests. TUI tests use Textual's `app.run_test()` with `pilot` for headless interaction.
+
+## CI / Release
+
+### Workflows
+
+- `.github/workflows/ci.yml` — runs on every PR and push to `main`. Matrix across Python 3.10–3.13: `ruff check`, `ruff format --check`, `mypy`, `pytest tests/unit/`. Installs with `pip install -e ".[dev,tui]"` so Textual-dependent TUI tests run. Functional tests are not run in CI.
+- `.github/workflows/release.yml` — triggered on `v*.*.*` tag push (and `workflow_dispatch` for TestPyPI-only dry-runs). Three jobs: `build` (sdist + wheel via `python -m build`) → `publish-testpypi` → `publish-pypi`. The PyPI job is gated on a tag ref, so manual dispatch can never reach prod PyPI.
+
+### PyPI Trusted Publishing (OIDC — no API tokens)
+
+Publishing is configured via [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) — short-lived OIDC credentials minted by GitHub per job. No long-lived API tokens live in the repo or anywhere else.
+
+Configured on both `pypi.org` and `test.pypi.org` (separate accounts) under *Your projects → Publishing*:
+
+| Field | Value |
+|---|---|
+| Owner | `cbyrd01` |
+| Repository | `klipperctl` |
+| Workflow | `release.yml` |
+| Environment | `pypi` (prod) / `testpypi` (test) |
+
+GitHub environments (*Settings → Environments*):
+
+- `testpypi` — no restrictions.
+- `pypi` — required reviewer (cbyrd01); deployment refs restricted to `v*.*.*` tags on branch `main`.
+
+Attestations (PEP 740) are emitted automatically by `pypa/gh-action-pypi-publish@release/v1`; no separate Sigstore step.
+
+### Cutting a release
+
+1. Bump the version in **both** places (they must match; the build job verifies this):
+   - `pyproject.toml` → `[project] version = "X.Y.Z"`
+   - `src/klipperctl/__init__.py` → `__version__ = "X.Y.Z"`
+2. Commit: `release: vX.Y.Z`.
+3. Tag and push:
+   ```bash
+   git tag vX.Y.Z
+   git push origin main
+   git push origin vX.Y.Z
+   ```
+4. GitHub Actions runs `build` → `publish-testpypi` automatically.
+5. Approve the `pypi` environment deployment in the Actions UI. The `publish-pypi` job will then upload to PyPI.
+6. Verify at <https://pypi.org/project/klipperctl/>.
+
+To smoke-test the release pipeline without cutting a real release, run `release.yml` via *Actions → Release → Run workflow*. This publishes to TestPyPI only; the PyPI job is skipped because there's no tag ref.
