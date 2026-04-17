@@ -143,17 +143,15 @@ async def _ensure_not_printing(  # type: ignore[no-untyped-def]
         state = await runner.get_state()
         if state in ACTIVELY_PRINTING_STATES:
             # Soft cleanup didn't take; hard-reset the firmware.
-            with (
-                contextlib.suppress(Exception),
-                MoonrakerClient(base_url=moonraker_url, timeout=15.0) as client,
-            ):
+            with contextlib.suppress(Exception), MoonrakerClient(
+                base_url=moonraker_url, timeout=15.0
+            ) as client:
                 restart_firmware(client, timeout=timeout, poll_interval=2.0)
 
     # Also recover from Klippy shutdown (MCU timer errors, etc).
-    with (
-        contextlib.suppress(Exception),
-        MoonrakerClient(base_url=moonraker_url, timeout=15.0) as client,
-    ):
+    with contextlib.suppress(Exception), MoonrakerClient(
+        base_url=moonraker_url, timeout=15.0
+    ) as client:
         status = get_printer_status(client)
         if status.klippy_state != "ready":
             restart_firmware(client, timeout=timeout, poll_interval=2.0)

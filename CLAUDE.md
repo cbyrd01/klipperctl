@@ -93,10 +93,11 @@ mypy src/klipperctl/
 
 ### Dependencies
 
+- **Python 3.8+** for the core CLI. The TUI requires Python 3.9+ (Textual ≥1.0 dropped 3.8).
 - `click>=8.1` — CLI framework (zero transitive deps)
 - `rich>=13.0` — Tables, colored output
 - `moonraker-client>=0.1.0` — Moonraker API client library (httpx + websockets)
-- Optional TUI: `textual>=1.0` — Terminal UI framework (install with `pip install klipperctl[tui]`)
+- Optional TUI: `textual>=1.0; python_version>='3.9'` — Terminal UI framework (install with `pip install klipperctl[tui]`). On Python 3.8 the extra resolves to nothing and `klipperctl tui` exits with the existing "textual not installed" ImportError guard.
 - Dev: `pytest`, `pytest-asyncio`, `ruff`, `mypy`
 
 ### Test Structure
@@ -133,7 +134,7 @@ mypy src/klipperctl/
 
 ### Workflows
 
-- `.github/workflows/ci.yml` — runs on every PR and push to `main`. Matrix across Python 3.10–3.13: `ruff check`, `ruff format --check`, `mypy`, `pytest tests/unit/`. Installs with `pip install -e ".[dev,tui]"` so Textual-dependent TUI tests run. Functional tests are not run in CI.
+- `.github/workflows/ci.yml` — runs on every PR and push to `main`. Matrix across Python 3.8–3.13: `ruff check`, `ruff format --check`, `mypy`, `pytest tests/unit/`. Installs with `pip install -e ".[dev,tui]"` on 3.9+ so Textual-dependent TUI tests run; on 3.8 installs `".[dev]"` only (Textual ≥1.0 requires 3.9+), and TUI test modules skip via `pytest.importorskip("textual")`. Functional tests are not run in CI.
 - `.github/workflows/release.yml` — triggered on `v*.*.*` tag push (and `workflow_dispatch` for TestPyPI-only dry-runs). Three jobs: `build` (sdist + wheel via `python -m build`) → `publish-testpypi` → `publish-pypi`. The PyPI job is gated on a tag ref, so manual dispatch can never reach prod PyPI.
 
 ### PyPI Trusted Publishing (OIDC — no API tokens)

@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytest.importorskip("textual")
+
 MOONRAKER_URL = os.environ.get("MOONRAKER_URL", "http://localhost:7125")
 
 

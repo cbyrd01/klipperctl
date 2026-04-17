@@ -168,8 +168,7 @@ async def test_cli_upload_and_download_roundtrip(
         assert local_dst.exists()
         assert local_dst.read_bytes() == PAYLOAD
     finally:
-        with (
-            contextlib.suppress(Exception),
-            MoonrakerClient(base_url=moonraker_url, timeout=15.0) as client,
-        ):
+        with contextlib.suppress(Exception), MoonrakerClient(
+            base_url=moonraker_url, timeout=15.0
+        ) as client:
             client.files_delete("gcodes", filename)

@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "klipperctl"
-version = "0.1.0"
+version = "0.2.0"
 description = "Command line interface for 3D printers using Moonraker and Klipper"
 readme = "README.md"
 license = "GPL-3.0"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 authors = [
     { name = "Christopher Byrd" },
 ]
@@ -19,6 +19,8 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -28,7 +30,7 @@ classifiers = [
 dependencies = [
     "click>=8.1",
     "rich>=13.0",
-    "moonraker-client>=0.1.0",
+    "moonraker-client>=0.2.0",
     "tomli>=2.0; python_version<'3.11'",
 ]
 
@@ -40,7 +42,7 @@ dev = [
     "mypy>=1.13",
 ]
 tui = [
-    "textual>=1.0",
+    "textual>=1.0; python_version>='3.9'",
 ]
 
 [project.scripts]
@@ -61,7 +63,7 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py38"
 line-length = 99
 
 [tool.ruff.lint]
@@ -72,13 +74,24 @@ select = ["B", "C4", "E", "F", "I", "N", "RUF", "SIM", "UP", "W"]
 "src/klipperctl/tui/**" = ["RUF012"]
 
 [tool.mypy]
-python_version = "3.10"
+# mypy 1.14+ (last version supporting Python 3.8 at runtime) no longer
+# supports `python_version = "3.8"` as a target — its lowest is 3.9.
+# Package runtime still supports 3.8; 3.9 is close enough for type-check
+# semantics.
+python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = "tomli"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Textual is an optional dependency gated on Python 3.9+. On 3.8 (where we
+# still type-check the core CLI) mypy can't find the textual stubs; ignore
+# those imports rather than mypy-fail the whole run.
+module = "textual.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

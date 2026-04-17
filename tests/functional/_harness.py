@@ -17,7 +17,7 @@ identical assertions. Runners re-use existing code wherever possible:
 
 All runner methods are ``async`` because the TUI modality must drive a
 live Textual Pilot, and Pilot operations must be awaited. The library
-and CLI runners wrap their sync calls in ``asyncio.to_thread`` so the
+and CLI runners wrap their sync calls in ``_to_thread`` so the
 three modalities share an identical async signature and tests can be
 written once against the abstract interface.
 """
@@ -25,13 +25,25 @@ written once against the abstract interface.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
+import sys
 import time
 import uuid
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from click.testing import CliRunner
+
+if sys.version_info >= (3, 9):
+    _to_thread = asyncio.to_thread
+else:
+    # ``asyncio.to_thread`` is 3.9+. Provide a small backport for the
+    # functional test harness when running on Python 3.8.
+    async def _to_thread(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
+
 
 if TYPE_CHECKING:
     from moonraker_client import MoonrakerClient
@@ -198,17 +210,17 @@ class LibraryRunner(WorkflowRunner):
         def _call() -> str:
             return _read_print_state(self._client)
 
-        return await asyncio.to_thread(_call)
+        return await _to_thread(_call)
 
     async def set_hotend_temp(self, target: float) -> None:
         from moonraker_client.helpers import set_hotend_temp
 
-        await asyncio.to_thread(set_hotend_temp, self._client, target)
+        await _to_thread(set_hotend_temp, self._client, target)
 
     async def set_bed_temp(self, target: float) -> None:
         from moonraker_client.helpers import set_bed_temp
 
-        await asyncio.to_thread(set_bed_temp, self._client, target)
+        await _to_thread(set_bed_temp, self._client, target)
 
     async def get_hotend_target(self) -> float:
         from moonraker_client.helpers import get_temperatures
@@ -217,14 +229,14 @@ class LibraryRunner(WorkflowRunner):
             reading = get_temperatures(self._client).get("extruder")
             return float(reading.target) if reading else 0.0
 
-        return await asyncio.to_thread(_call)
+        return await _to_thread(_call)
 
     async def wait_until_temp(
         self, heater: str, target: float, tol: float = 3.0, timeout: float = 180.0
     ) -> bool:
         from moonraker_client.helpers import wait_for_temps
 
-        return await asyncio.to_thread(
+        return await _to_thread(
             wait_for_temps,
             self._client,
             {heater: target},
@@ -234,25 +246,25 @@ class LibraryRunner(WorkflowRunner):
         )
 
     async def upload_sentinel_gcode(self) -> str:
-        return await asyncio.to_thread(_upload_sentinel, self._client)
+        return await _to_thread(_upload_sentinel, self._client)
 
     async def start_print(self, filename: str) -> None:
         from moonraker_client.helpers import start_print
 
-        await asyncio.to_thread(start_print, self._client, filename)
+        await _to_thread(start_print, self._client, filename)
 
     async def cancel_print(self) -> None:
-        await asyncio.to_thread(self._client.print_cancel)
+        await _to_thread(self._client.print_cancel)
 
     async def send_gcode(self, command: str) -> None:
         from moonraker_client.helpers import send_gcode
 
-        await asyncio.to_thread(send_gcode, self._client, command)
+        await _to_thread(send_gcode, self._client, command)
 
     async def tail_logs_for(self, marker: str, timeout: float = 10.0) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            found = await asyncio.to_thread(_scan_gcode_store_for, self._client, marker)
+            found = await _to_thread(_scan_gcode_store_for, self._client, marker)
             if found:
                 return True
             await asyncio.sleep(0.5)
@@ -281,7 +293,14 @@ class CliModalityRunner(WorkflowRunner):
             cli_args.append("--json")
         cli_args.extend(args)
         result = self._runner.invoke(cli, cli_args)
-        return result.exit_code, result.output or "", result.stderr or ""
+        # click 8.1 (Python 3.8 floor) raises ValueError on result.stderr
+        # when mix_stderr defaults to True. Fall back to stderr_bytes.
+        try:
+            stderr = result.stderr or ""
+        except ValueError:
+            stderr_bytes = getattr(result, "stderr_bytes", None) or b""
+            stderr = stderr_bytes.decode("utf-8", errors="replace")
+        return result.exit_code, result.output or "", stderr
 
     def _invoke_json_sync(self, *args: str) -> object:
         code, out, err = self._invoke(*args, json_output=True)
@@ -290,7 +309,7 @@ class CliModalityRunner(WorkflowRunner):
         return json.loads(out)
 
     async def _invoke_json(self, *args: str) -> object:
-        return await asyncio.to_thread(self._invoke_json_sync, *args)
+        return await _to_thread(self._invoke_json_sync, *args)
 
     async def _invoke_ok(self, *args: str) -> None:
         def _run() -> None:
@@ -298,7 +317,7 @@ class CliModalityRunner(WorkflowRunner):
             if code != 0:
                 raise RuntimeError(f"CLI {' '.join(args)} failed: {err}")
 
-        await asyncio.to_thread(_run)
+        await _to_thread(_run)
 
     async def get_state(self) -> str:
         # `klipperctl printer status` surfaces the *klippy* state (stays
@@ -313,7 +332,7 @@ class CliModalityRunner(WorkflowRunner):
             with MoonrakerClient(base_url=self._url, timeout=15.0) as c:
                 return _read_print_state(c)
 
-        return await asyncio.to_thread(_call)
+        return await _to_thread(_call)
 
     async def set_hotend_temp(self, target: float) -> None:
         await self._invoke_ok("printer", "set-temp", "--hotend", str(target))
@@ -354,7 +373,7 @@ class CliModalityRunner(WorkflowRunner):
             with MoonrakerClient(base_url=self._url, timeout=15.0) as c:
                 return _upload_sentinel(c)
 
-        return await asyncio.to_thread(_do)
+        return await _to_thread(_do)
 
     async def start_print(self, filename: str) -> None:
         await self._invoke_ok("print", "start", filename)
@@ -374,7 +393,7 @@ class CliModalityRunner(WorkflowRunner):
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if await asyncio.to_thread(_scan_once):
+            if await _to_thread(_scan_once):
                 return True
             await asyncio.sleep(0.5)
         return False
@@ -428,7 +447,7 @@ class TuiRunner(WorkflowRunner):
             with self._lib_client() as c:
                 return _read_print_state(c)
 
-        return await asyncio.to_thread(_call)
+        return await _to_thread(_call)
 
     async def set_hotend_temp(self, target: float) -> None:
         await self._run_cli_via_tui(["printer", "set-temp", "--hotend", str(target)])
@@ -444,7 +463,7 @@ class TuiRunner(WorkflowRunner):
                 reading = get_temperatures(c).get("extruder")
                 return float(reading.target) if reading else 0.0
 
-        return await asyncio.to_thread(_call)
+        return await _to_thread(_call)
 
     async def wait_until_temp(
         self, heater: str, target: float, tol: float = 3.0, timeout: float = 180.0
@@ -461,14 +480,14 @@ class TuiRunner(WorkflowRunner):
                     poll_interval=2.0,
                 )
 
-        return await asyncio.to_thread(_call)
+        return await _to_thread(_call)
 
     async def upload_sentinel_gcode(self) -> str:
         def _do() -> str:
             with self._lib_client() as c:
                 return _upload_sentinel(c)
 
-        return await asyncio.to_thread(_do)
+        return await _to_thread(_do)
 
     async def start_print(self, filename: str) -> None:
         await self._run_cli_via_tui(["print", "start", filename])
@@ -490,7 +509,7 @@ class TuiRunner(WorkflowRunner):
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if await asyncio.to_thread(_scan_once):
+            if await _to_thread(_scan_once):
                 return True
             await asyncio.sleep(0.5)
         return False

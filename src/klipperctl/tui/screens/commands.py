@@ -78,7 +78,7 @@ class CommandMenuScreen(Screen):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         item_id = event.item.id or ""
-        group_key = item_id.removeprefix("group-")
+        group_key = item_id[len("group-") :] if item_id.startswith("group-") else item_id
         screen_map: dict[str, type[Screen]] = {
             "printer": PrinterCommandScreen,
             "print": PrintCommandScreen,
@@ -234,7 +234,7 @@ class _BaseCommandScreen(Screen):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         item_id = event.item.id or ""
-        cmd_name = item_id.removeprefix("cmd-")
+        cmd_name = item_id[len("cmd-") :] if item_id.startswith("cmd-") else item_id
         self._run_command(cmd_name)
 
     def _run_command(self, cmd_name: str) -> None:
@@ -369,7 +369,7 @@ class SelectionScreen(ModalScreen[str]):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         item_id = event.item.id or ""
-        idx_str = item_id.removeprefix("sel-")
+        idx_str = item_id[len("sel-") :] if item_id.startswith("sel-") else item_id
         try:
             idx = int(idx_str)
             value = self._items[idx][0]

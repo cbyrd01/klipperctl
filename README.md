@@ -27,6 +27,10 @@ With TUI support (interactive terminal dashboard):
 pip install "klipperctl[tui]"
 ```
 
+**Requires Python 3.8+.** The TUI (`klipperctl[tui]`) additionally requires Python 3.9+
+(Textual ≥1.0 dropped 3.8 support); on Python 3.8 the core CLI works but `klipperctl tui`
+will exit with a message that `textual` is not installed.
+
 For development (sibling-checkout layout):
 
 ```bash

@@ -25,6 +25,8 @@ import uuid
 
 import pytest
 
+pytest.importorskip("textual")
+
 pytestmark = [pytest.mark.functional, pytest.mark.asyncio]
 
 
@@ -370,8 +372,7 @@ async def test_dashboard_console_error_path(moonraker_url: str, printer_ready: b
         from moonraker_client import MoonrakerClient
         from moonraker_client.helpers import set_hotend_temp
 
-        with (
-            contextlib.suppress(Exception),
-            MoonrakerClient(base_url=moonraker_url, timeout=15.0) as client,
-        ):
+        with contextlib.suppress(Exception), MoonrakerClient(
+            base_url=moonraker_url, timeout=15.0
+        ) as client:
             set_hotend_temp(client, 0.0)

@@ -22,6 +22,8 @@ import contextlib
 
 import pytest
 
+pytest.importorskip("textual")
+
 pytestmark = [pytest.mark.functional, pytest.mark.asyncio]
 
 
@@ -120,10 +122,9 @@ async def test_setting_hotend_target_reflects_in_chart(
             )
     finally:
         # Cool down so the next test starts from a clean baseline.
-        with (
-            contextlib.suppress(Exception),
-            MoonrakerClient(base_url=moonraker_url, timeout=15.0) as client,
-        ):
+        with contextlib.suppress(Exception), MoonrakerClient(
+            base_url=moonraker_url, timeout=15.0
+        ) as client:
             set_hotend_temp(client, 0.0)
 
 
